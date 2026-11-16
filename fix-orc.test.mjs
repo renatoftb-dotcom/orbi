@@ -28,7 +28,12 @@ const O = new Function(mesclar + "\n" + puroOrc + `
   return { orcHojeLocal, orcSomarMeses, orcDividirIgual, orcGerarParcelasIguais, orcRedimensionarParcelas,
     orcRemoverParcelaIgual, orcCascataParcela, orcTemParcelaSemValor, orcMaiorNumeroUsado, proximoIdOrcamento,
     orcValoresBase, orcValorTotal, orcOpcoesDoGanho, orcStatusAoSalvarRascunho, orcMesclarComAtual,
-    orcConferencia, orcEtapasDaConferencia };`)();
+    orcConferencia, orcEtapasDaConferencia, orcPrecoMarcenaria };`)();
+
+const txSrc = ler("shared-textos.jsx");
+const X = new Function(txSrc + `
+  return { txtEscopoPadraoDoOrcamento, txtNaoInclusosPadraoDoOrcamento, txtPrazoPadraoDoOrcamento,
+    txtEscopoAjustarMarcenaria, txtFraseDoEscopo, txtFormatarEscopoComoTexto, TXT_DEFAULT_ESCOPO_ETAPAS, TXT_DEFAULT_PRAZO };`)();
 
 const efArq = ler("escritorio-financeiro.jsx");
 const F = new Function(efArq.slice(0, efArq.indexOf("// UI — daqui para baixo")) +
@@ -222,8 +227,8 @@ teste("11. Lista/ordenação/ganho não somam engenharia (ou arquitetura) que fi
   // proposta antiga sem arqEdit/engEdit: o calculo tem precoEng, mas a proposta não incluía
   const prop = { incluiEng: false, calculo: { precoArq: 2000, precoEng: 800 } };
   assert.strictEqual(O.orcValorTotal({ propostas: [prop] }), 2000);
-  assert.deepStrictEqual(O.orcValoresBase({}, prop), { arq: 2000, eng: 0 });
-  assert.deepStrictEqual(O.orcValoresBase({ incluiArq: false, resultado: { precoArq: 1, precoEng: 9 } }, null), { arq: 0, eng: 9 });
+  assert.deepStrictEqual(O.orcValoresBase({}, prop), { arq: 2000, eng: 0, marc: 0 });
+  assert.deepStrictEqual(O.orcValoresBase({ incluiArq: false, resultado: { precoArq: 1, precoEng: 9 } }, null), { arq: 0, eng: 9, marc: 0 });
   assert.strictEqual(O.orcValorTotal({ propostas: [{ ...prop, valorTotalExibido: 2345 }] }), 2345, "valor exibido continua mandando");
   assert.ok(/orcValoresBase\(orc, ultPropImp\)/.test(orcSrc), "o modal de ganho usa orcValoresBase");
   assert.strictEqual((orcSrc.match(/const valorTotal = orcValorTotal\(orc\);/g) || []).length, 2, "card e linha da tabela");
@@ -298,6 +303,55 @@ teste("conferência do orçamento: o que bloqueia o PDF e o que só avisa, por e
   // sem cômodo, sem forma, sem arquitetura nem engenharia
   const vazio = O.orcConferencia({ ...base, incluiArq: false, temComodos: false, formas: [] });
   assert.deepStrictEqual(vazio.filter((c) => !c.ok).map((c) => c.id).sort(), ["comodos", "escopo", "formas"]);
+});
+
+// ── 16. Marcenaria: 60% da arquitetura calculada, linha própria ──
+teste("16. Marcenaria: 60% da arq calculada; entra no total/ganho só se incluída; textos do Template", () => {
+  assert.strictEqual(O.orcPrecoMarcenaria(10000), 6000);
+  assert.strictEqual(O.orcPrecoMarcenaria(1234.56), 740.74);
+  // raiz sem precoMarc (orçamento antigo): calcula na hora; só soma se incluída
+  const orc = { incluiMarcenaria: true, resultado: { precoArq: 10000, precoEng: 3000 } };
+  assert.deepStrictEqual(O.orcValoresBase(orc, null), { arq: 10000, eng: 3000, marc: 6000 });
+  assert.strictEqual(O.orcValorTotal(orc), 19000);
+  assert.strictEqual(O.orcValorTotal({ ...orc, incluiMarcenaria: false }), 13000);
+  // só marcenaria: arq e eng de fora
+  const soMarc = { incluiArq: false, incluiEng: false, incluiMarcenaria: true, resultado: { precoArq: 10000, precoEng: 3000, precoMarc: 6000 } };
+  assert.deepStrictEqual(O.orcValoresBase(soMarc, null), { arq: 0, eng: 0, marc: 6000 });
+  // proposta: valor do template (marcEdit) manda; arq editada não mexe na marcenaria
+  const prop = { incluiMarcenaria: true, arqEdit: 9000, calculo: { precoArq: 10000, precoEng: 0 } };
+  assert.strictEqual(O.orcValoresBase({}, prop).marc, 6000);
+  assert.strictEqual(O.orcValoresBase({}, { ...prop, marcEdit: 5500 }).marc, 5500);
+  // ganho: duas partes = pacote; só marcenaria = "Apenas Marcenaria"
+  const g = (a, e, m) => O.orcOpcoesDoGanho({}, null, a, e, [], m);
+  assert.strictEqual(g(true, false, true).blocoLabel, "Pacote Completo");
+  assert.strictEqual(g(false, false, true).blocoLabel, "Apenas Marcenaria");
+  assert.strictEqual(g(true, false, false).blocoLabel, "Apenas Arquitetura");
+  // conferência: só marcenaria já é escopo
+  const esc = (x) => O.orcConferencia(x).find((c) => c.id === "escopo").ok;
+  assert.strictEqual(esc({ incluiArq: false, incluiEng: false, incluiMarcenaria: true }), true);
+  assert.strictEqual(esc({ incluiArq: false, incluiEng: false }), false);
+  // Template: sem marcenaria, igual a antes
+  assert.strictEqual(X.txtEscopoPadraoDoOrcamento({}), X.TXT_DEFAULT_ESCOPO_ETAPAS);
+  assert.strictEqual(X.txtPrazoPadraoDoOrcamento({}), X.TXT_DEFAULT_PRAZO);
+  const comArq = X.txtEscopoPadraoDoOrcamento({ incluiMarcenaria: true });
+  assert.strictEqual(comArq[comArq.length - 1].titulo, (X.TXT_DEFAULT_ESCOPO_ETAPAS.length + 1) + ". Projeto de Marcenaria");
+  assert.deepStrictEqual(X.txtEscopoPadraoDoOrcamento({ incluiMarcenaria: true, incluiArq: false }).map((b) => b.titulo), ["1. Projeto de Marcenaria"]);
+  assert.ok(!X.txtNaoInclusosPadraoDoOrcamento({ incluiMarcenaria: true }).some((l) => /marcenaria/i.test(l)));
+  assert.ok(X.txtNaoInclusosPadraoDoOrcamento({}).some((l) => /marcenaria/i.test(l)));
+  const prazoSo = X.txtPrazoPadraoDoOrcamento({ incluiMarcenaria: true, incluiArq: false });
+  assert.ok(prazoSo.some((p) => /marcenaria/i.test(p)) && !prazoSo.some((p) => /arquitet/i.test(p)));
+  // escopo salvo no Template antes de ligar a marcenaria: ganha o bloco; desligada, sai
+  const texto = X.txtFormatarEscopoComoTexto(X.TXT_DEFAULT_ESCOPO_ETAPAS);
+  assert.strictEqual(X.txtEscopoAjustarMarcenaria(texto, false), texto, "sem marcenaria, intocado");
+  const com = X.txtEscopoAjustarMarcenaria(texto, true);
+  assert.ok(com.includes((X.TXT_DEFAULT_ESCOPO_ETAPAS.length + 1) + ". Projeto de Marcenaria"));
+  assert.strictEqual(X.txtEscopoAjustarMarcenaria(com, true), com, "não duplica");
+  assert.strictEqual(X.txtEscopoAjustarMarcenaria(com, false).split(/\n+─{4,}\n+/g).length, X.TXT_DEFAULT_ESCOPO_ETAPAS.length);
+  assert.strictEqual(X.txtFraseDoEscopo(true, false, true), "o projeto arquitetônico e o projeto de marcenaria (móveis planejados)");
+  assert.strictEqual(X.txtFraseDoEscopo(false, false, true), "o projeto de marcenaria (móveis planejados)");
+  // escopo do modelo: bloco da marcenaria fica ao sincronizar com as etapas
+  const sinc = E.sincronizarEscopoComEtapas([{ etapaId: 1 }, { etapaId: "marc", isMarc: true }], [{ id: 1 }]);
+  assert.ok(sinc.some((b) => b.isMarc));
 });
 
 for (const [nome, fn] of testes) {

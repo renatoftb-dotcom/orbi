@@ -67695,6 +67695,87 @@ const TXT_DEFAULT_PRAZO = [
   "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura.",
 ];
 
+// ─── Projeto de Marcenaria ───────────────────────────────────
+// Entra no escopo quando a marcenaria faz parte da proposta — sozinha ou
+// junto da arquitetura/engenharia. Valor: 60% da arquitetura calculada
+// (orcPrecoMarcenaria, em orcamento-teste.jsx).
+const TXT_DEFAULT_ESCOPO_MARCENARIA = {
+  titulo: "Projeto de Marcenaria",
+  objetivo: "Desenvolver o projeto dos móveis planejados dos ambientes, definindo composição interna, materiais, cores, acabamentos e iluminação, com o detalhamento executivo necessário para orçamento, fabricação e instalação pela marcenaria.",
+  itens: [
+    "Levantamento das necessidades de uso e armazenamento de cada ambiente",
+    "Definição do layout e da composição interna dos móveis: portas, gavetas, prateleiras, nichos, cabideiros e divisórias",
+    "Especificação dos materiais e cores da marcenaria: MDF, laminados, lâminas de madeira, laca, vidros e espelhos",
+    "Especificação das ferragens: dobradiças, corrediças, puxadores e sistemas de abertura",
+    "Definição do tipo de pedra das bancadas e do revestimento das paredes junto aos móveis",
+    "Projeto de iluminação da marcenaria: fitas e perfis de LED, spots e pontos elétricos necessários",
+    "Compatibilização com os projetos de arquitetura, elétrico e hidrossanitário",
+    "Ajustes conforme alinhamento com o cliente",
+  ],
+  entregaveis: [
+    "Planta de layout da marcenaria por ambiente",
+    "Vistas e elevações cotadas de cada móvel",
+    "Cortes e detalhes construtivos",
+    "Quantitativo por móvel: portas, gavetas, prateleiras e ferragens",
+    "Memorial de materiais, cores, acabamentos, pedras e revestimentos",
+    "Planta de pontos elétricos e de iluminação da marcenaria",
+    "Imagens 3D dos ambientes",
+  ],
+  obs: "O projeto executivo de marcenaria permite orçar com mais de uma marcenaria sobre a mesma base e reduz erros de fabricação e de instalação. Não inclui a fabricação nem a instalação dos móveis.",
+};
+
+const TXT_PRAZO_MARCENARIA = "Prazo estimado para entrega do Projeto de Marcenaria: 30 dias úteis após contratação.";
+
+// Separador entre blocos do escopo em texto (o mesmo que o modelo divide).
+const TXT_SEPARADOR_ESCOPO = "\n\n────────\n\n";
+
+// Textos padrão do Template conforme o que entrou na proposta. Sem
+// marcenaria, o resultado é exatamente o de antes.
+function txtEscopoPadraoDoOrcamento(d) {
+  const x = d || {};
+  if (!x.incluiMarcenaria) return TXT_DEFAULT_ESCOPO_ETAPAS;
+  const lista = x.incluiArq !== false ? [...TXT_DEFAULT_ESCOPO_ETAPAS] : [];
+  lista.push({ ...TXT_DEFAULT_ESCOPO_MARCENARIA, titulo: `${lista.length + 1}. ${TXT_DEFAULT_ESCOPO_MARCENARIA.titulo}` });
+  return lista;
+}
+function txtNaoInclusosPadraoDoOrcamento(d) {
+  if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_NAO_INCLUSOS;
+  return TXT_DEFAULT_NAO_INCLUSOS.filter(s => !/marcenaria/i.test(s));
+}
+function txtPrazoPadraoDoOrcamento(d) {
+  if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_PRAZO;
+  const lista = d.incluiArq !== false ? [...TXT_DEFAULT_PRAZO] : TXT_DEFAULT_PRAZO.filter(p => !/arquitet/i.test(p));
+  return [...lista, TXT_PRAZO_MARCENARIA];
+}
+
+// Escopo em texto (Template) x marcenaria ligada/desligada depois de o
+// texto ter sido salvo: com a marcenaria e sem bloco dela, acrescenta o
+// bloco padrão numerado em seguida; sem a marcenaria, tira o bloco dela.
+// Sem nada a mudar, devolve o texto como veio.
+function txtEscopoAjustarMarcenaria(texto, incluiMarc) {
+  if (!texto || typeof texto !== "string") return texto;
+  const blocos = texto.split(/\n+─{4,}\n+/g);
+  const ehMarc = (b) => /marcenaria/i.test(String(txtTrimBlocoEscopo(b.trim()).split("\n")[0] || ""));
+  const tem = blocos.some(ehMarc);
+  if (incluiMarc && !tem) {
+    const n = blocos.filter(b => txtTrimBlocoEscopo(b.trim())).length + 1;
+    const bloco = txtFormatarEscopoComoTexto([{ ...TXT_DEFAULT_ESCOPO_MARCENARIA, titulo: `${n}. ${TXT_DEFAULT_ESCOPO_MARCENARIA.titulo}` }]);
+    return texto.replace(/\s+$/, "") + TXT_SEPARADOR_ESCOPO + bloco;
+  }
+  if (!incluiMarc && tem) return blocos.filter(b => !ehMarc(b)).join(TXT_SEPARADOR_ESCOPO);
+  return texto;
+}
+
+// "o projeto arquitetônico, engenharia complementar (...) e o projeto de
+// marcenaria" — a frase de abertura do escopo com o que entrou.
+function txtFraseDoEscopo(incluiArq, incluiEng, incluiMarc) {
+  return txtLista([
+    incluiArq ? "o projeto arquitetônico" : "",
+    incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : "",
+    incluiMarc ? "o projeto de marcenaria (móveis planejados)" : "",
+  ]);
+}
+
 const TXT_DEFAULT_ACEITE =
   "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.";
 
@@ -68075,7 +68156,7 @@ function escopoBlocoLivre(b) {
 function sincronizarEscopoComEtapas(prev, etapasPct) {
   const idsAtivos = new Set((etapasPct || []).map(e => e.id));
   // Remove blocos de etapas que foram excluídas (não-eng e não-livres)
-  const filtrado = (prev || []).filter(b => b.isEng || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
+  const filtrado = (prev || []).filter(b => b.isEng || b.isMarc || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
   // Adiciona blocos de etapas novas (id > 5 = customizadas)
   (etapasPct || []).forEach(et => {
     if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
@@ -68281,7 +68362,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   const setArqEdit = setArqEditState;
   const setEngEdit = setEngEditState;
   // Flag pra UI saber se deve esconder inputs editáveis (template ativo).
-  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null);
+  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null) || (_tvTpl.valorMarc != null);
+  // Marcenaria (linha própria): valor do Template > proposta travada >
+  // cálculo (60% da arquitetura calculada). Edita-se no Template.
+  const marcEdit = (_tvTpl.valorMarc != null) ? Number(_tvTpl.valorMarc)
+    : (lockEdicao && snap?.marcEdit != null) ? Number(snap.marcEdit)
+    : (calculo.precoMarc != null ? Number(calculo.precoMarc) : orcPrecoMarcenaria(calculo.precoArq));
   const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
@@ -68352,6 +68438,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
 
   const arqCI = incluiArq ? arqEdit : 0;
   const engCI = incluiEng ? engEdit : 0;
+  const marcAtiva = !!incluiMarcenaria;
+  const marcCI = marcAtiva ? (Number(marcEdit) || 0) : 0;
 
   // Helper: converte valor SEM imposto -> COM imposto (inside calculation)
   // valor_bruto = liquido / (1 - aliq/100). Se temImposto=false, retorna o valor direto.
@@ -68364,13 +68452,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     : v;
 
   // Recalcula totais com valores editados
-  const totSIEdit   = arqCI + engCI;
+  const totSIEdit   = Math.round((arqCI + engCI + marcCI) * 100) / 100;
   const totCIEdit   = comImposto(totSIEdit);
   const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
   // Base das etapas = só arquitetura com imposto
   const arqCIEdit   = comImposto(arqCI);
   // Engenharia com imposto (para linha separada na tabela de etapas)
   const engCIEdit   = comImposto(engCI);
+  // Marcenaria com imposto (linha própria, como a engenharia)
+  const marcCIEdit  = comImposto(marcCI);
 
   // Etapa isolada — valor proporcional do total
   // Etapas isoladas — múltipla seleção (state local, manipulável inline)
@@ -68389,7 +68479,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Com isolamento: eng entra apenas se eng estiver isolada
   const engSI           = engAtiva ? engCI : 0;
   const totSIBase       = temIsoladas
-    ? Math.round((arqIsoladaSI + engSI) * 100) / 100
+    ? Math.round((arqIsoladaSI + engSI + marcCI) * 100) / 100
     : totSIEdit;
 
   // Total do pacote em modo etapas — usado tanto no preview quanto no pagamento
@@ -68399,7 +68489,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     const etapasArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
     const pctAtivo = etapasArqAtivas.reduce((s,e)=>s+Number(e.pct),0);
     // arqCIEdit = arq TOTAL com imposto (base dos cálculos por etapa no preview)
-    return Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0)) * 100) / 100;
+    return Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0) + (marcAtiva ? marcCIEdit : 0)) * 100) / 100;
   })();
   // Subtotal apenas das etapas de arquitetura (sem eng) — para oferecer opção "Apenas Arquitetura"
   const subTotalArqEtapas = (() => {
@@ -68409,7 +68499,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   })();
 
   // Subtítulo dinâmico — usa engAtiva (não só o toggle, mas também considera isolamento)
-  const subTituloDefault = (incluiArq && engAtiva)
+  const subTituloDefault = marcAtiva
+    ? ((incluiArq || engAtiva)
+      ? `Proposta Comercial de Projetos de ${txtLista([incluiArq && "Arquitetura", engAtiva && "Engenharia", "Marcenaria"])}`
+      : "Proposta Comercial de Projeto de Marcenaria")
+    : (incluiArq && engAtiva)
     ? "Proposta Comercial de Projetos de Arquitetura e Engenharia"
     : (incluiArq && !engAtiva)
       ? "Proposta Comercial de Projetos de Arquitetura"
@@ -68523,17 +68617,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     { etapaId:3, titulo:"Aprovação na Prefeitura", objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.", itens:["Adequação do projeto às exigências legais e urbanísticas do município","Elaboração dos desenhos técnicos exigidos para aprovação","Montagem da documentação técnica necessária ao processo","Inserção de informações obrigatórias conforme normas municipais","Preparação de pranchas, quadros de áreas e demais peças gráficas","Apoio técnico durante o processo de aprovação","Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura"], entregaveis:["Projeto legal para aprovação","Plantas, cortes, fachadas e implantação conforme exigência municipal","Quadros de áreas","Arquivos e documentação técnica para protocolo"], obs:"Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.", isEng:false },
     { etapaId:4, titulo:"Projeto Executivo", objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.", itens:["Desenvolvimento técnico completo do projeto aprovado","Detalhamento arquitetônico para obra","Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos","Elaboração de desenhos técnicos executivos","Compatibilização arquitetônica com premissas de obra","Apoio técnico para leitura e entendimento do projeto pela equipe executora"], entregaveis:["Planta baixa executiva","Planta de locação e implantação","Planta de cobertura","Cortes e fachadas executivos","Planta de layout e pontos arquitetônicos","Planta de esquadrias e pisos","Detalhamentos construtivos","Quadro de esquadrias e quadro de áreas final"], obs:"É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.", isEng:false },
     { etapaId:5, titulo:"Projetos Complementares de Engenharia", objetivo:"", itens:["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"], entregaveis:[], obs:"", isEng:true },
+    // Marcenaria: bloco próprio, entra quando a marcenaria faz parte da proposta
+    { etapaId:"marc", ...TXT_DEFAULT_ESCOPO_MARCENARIA, itens:[...TXT_DEFAULT_ESCOPO_MARCENARIA.itens], entregaveis:[...TXT_DEFAULT_ESCOPO_MARCENARIA.entregaveis], isEng:false, isMarc:true },
   ];
 
   // Estado do escopo — sincronizado com etapasPct
   const [escopoState, setEscopoState] = useState(() => {
     // Se tem snapshot com escopo salvo, usa ele
+    // (salvo antes da marcenaria existir: ganha o bloco dela no fim)
     if (snap?.escopoState && snap.escopoState.length > 0) {
-      return snap.escopoState;
+      return snap.escopoState.some(b => b.isMarc) ? snap.escopoState
+        : [...snap.escopoState, ESCOPO_BASE.find(b => b.isMarc)];
     }
     // Senão, constrói do zero com base nas etapas ativas
     const idsAtivos = new Set(etapasPct.map(e => e.id));
-    return ESCOPO_BASE.filter(b => b.isEng || idsAtivos.has(b.etapaId));
+    return ESCOPO_BASE.filter(b => b.isEng || b.isMarc || idsAtivos.has(b.etapaId));
   });
 
   // Sincroniza escopo quando etapasPct muda (adiciona/remove etapas)
@@ -68549,21 +68647,18 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
     const blocos = escopoState.filter(b => {
+      if (b.isMarc) return marcAtiva;
       if (b.isEng) return engAtiva;
       if (!incluiArq) return false;
       if (b.etapaId === 1 && isPadrao) return false;
       if (temIsoladas && !b.isEng && !idsIsolados.has(b.etapaId) && !b.custom) return false;
       return true;
     });
-    let n = 0;
-    return blocos.map(b => {
-      if (!b.isEng) {
-        n++;
-        const semNum = b.titulo.replace(/^\d+\.\s*/, "");
-        return { ...b, tituloNum: `${n}. ${semNum}` };
-      }
-      const semNum = b.titulo.replace(/^\d+\.\s*/, "");
-      return { ...b, tituloNum: `${n+1}. ${semNum}` };
+    // Engenharia e marcenaria no fim, numeradas em sequência.
+    const ordenados = [...blocos.filter(b => !b.isEng && !b.isMarc), ...blocos.filter(b => b.isEng), ...blocos.filter(b => b.isMarc)];
+    return ordenados.map((b, i) => {
+      const semNum = String(b.titulo || "").replace(/^\d+\.\s*/, "");
+      return { ...b, tituloNum: `${i + 1}. ${semNum}` };
     });
   })();
 
@@ -68614,19 +68709,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     ? [
        ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação."] : []),
        ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
+       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
       ]
     : [
        ...(incluiArq || engAtiva ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
+       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
       ];
 
   // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os
   // textos no template, eles têm prioridade sobre os defaults dinâmicos.
   // Parsing: o template guarda como texto livre; aqui convertemos linhas
   // com bullets ("• item") em arrays estruturados pro modelo renderizar.
+  // Com a marcenaria na proposta, ela não pode sair também em "não inclusos".
   const naoInclTpl = (txTpl.naoInclusos && txTpl.naoInclusos.trim())
-    ? txtParseListaDeTexto(txTpl.naoInclusos).map(l => ({ label: l, sub: null }))
+    ? txtParseListaDeTexto(txTpl.naoInclusos).filter(l => !(marcAtiva && /marcenaria/i.test(l))).map(l => ({ label: l, sub: null }))
     : null;
   const prazoTpl = (txTpl.prazo && txTpl.prazo.trim())
     ? txtParseListaDeTexto(txTpl.prazo)
@@ -68634,7 +68732,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   const aceiteTpl = (txTpl.aceite && txTpl.aceite.trim()) ? txTpl.aceite : null;
   const apresentacaoTpl = (txTpl.apresentacao && txTpl.apresentacao.trim()) ? txTpl.apresentacao : null;
   const observacoesTpl = (txTpl.observacoes && txTpl.observacoes.trim()) ? txTpl.observacoes : null;
-  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txTpl.escopo : null;
+  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txtEscopoAjustarMarcenaria(txTpl.escopo, marcAtiva) : null;
   // Fase 7: quando o template tem escopo preenchido, edição inline do escopo
   // no preview vira read-only (a fonte canônica é o Template). Botões +/×
   // adicionam/removem items também são escondidos. Quando o template é pulado
@@ -68702,7 +68800,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       descEtCtrt: descEtCtrtLocal, parcEtCtrt: parcEtCtrtLocal,
       descPacCtrt: descPacCtrtLocal, parcPacCtrt: parcPacCtrtLocal,
       // Edições manuais
-      arqEdit, engEdit, resumoEdit,
+      arqEdit, engEdit, marcEdit, resumoEdit,
       subTituloEdit, validadeEdit, naoInclEdit, prazoEdit,
       responsavelEdit, cauEdit, emailEdit, telefoneEdit,
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
@@ -68713,6 +68811,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
       valorArqExibido: incluiArq ? (isPadrao ? arqCIEdit : subTotalArqEtapas) : 0,
       valorEngExibido: engAtiva ? engCIEdit : 0,
+      valorMarcExibido: marcAtiva ? marcCIEdit : 0,
       valorTotalExibido: isPadrao
         ? (totCIEdit)
         : totalPacoteEtapas,
@@ -69250,6 +69349,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       if (p.toLowerCase().includes("engenharia")) {
         if (!engAtiva) return false;
       }
+      if (/marcenaria/i.test(p) && !marcAtiva) return false;
+      if (/arquitet/i.test(p) && !incluiArq) return false;
       return true;
     });
 
@@ -69555,6 +69656,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 <div style={D.destaqueNum}>{fmtV(engCI)}</div>
               </div>
             )}
+            {marcAtiva && (
+              <div style={(incluiArq || incluiEng) ? D.destaqueVlrLight : D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Marcenaria</div>
+                <div style={D.destaqueNum}>{fmtV(marcCI)}</div>
+              </div>
+            )}
             {/* Linha sutil de total — formato muda conforme tem imposto ou não */}
             {temImposto ? (
               <div style={D.totalSubtle}>
@@ -69563,7 +69670,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 Total com impostos — <span style={D.totalSubtleB}>{fmtV(totCIEdit)}</span>
               </div>
             ) : (
-              (incluiArq && incluiEng) && (
+              ([incluiArq, incluiEng, marcAtiva].filter(Boolean).length >= 2) && (
                 <div style={D.totalSubtle}>
                   Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totSIEdit)}</span>
                 </div>
@@ -69580,6 +69687,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               valorEng={engCIEdit}
               incluiArq={incluiArq}
               incluiEng={incluiEng}
+              valorMarc={marcCIEdit}
+              incluiMarc={marcAtiva}
               accent="#fbbf24"
               pixTexto={null}
             />
@@ -69596,7 +69705,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             {/* ESCOPO DOS SERVIÇOS — estrutura rica (Versão B do mockup) */}
             <div style={D.secTit}>Escopo dos serviços</div>
             <div style={D.secTexto}>
-              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
+              O projeto compreenderá {txtFraseDoEscopo(incluiArq, incluiEng, marcAtiva)}, conforme detalhado abaixo:
             </div>
 
             {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
@@ -69933,6 +70042,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           /* Bloco "Valores dos projetos" — Arq + Eng lado a lado em mobile.
              Reduz só o padding direito da coluna pra evitar estouro horizontal. */
           .vk-prev-valores-grid > div { padding-right: 8px !important; }
+          /* Arq + Eng + Marcenaria não cabem lado a lado: uma embaixo da outra */
+          .vk-prev-valores-3 { grid-template-columns: 1fr !important; row-gap: 10px !important; }
+          .vk-prev-valores-3 > div { padding-left: 0 !important; }
+          .vk-prev-valores-3 > div:empty { display: none !important; }
           /* 6. Imagens e logos: nunca estouram */
           .vk-prev-editorial img { max-width: 100%; height: auto; }
         }
@@ -70109,7 +70222,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
-            {incluiArq && engAtiva && (
+            {incluiArq && (engAtiva || marcAtiva) && (
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
@@ -70197,7 +70310,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
         </div>
         <div>
 
-          <div className="vk-prev-valores-grid" style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div className={"vk-prev-valores-grid" + ([incluiArq, engAtiva, marcAtiva].filter(Boolean).length >= 3 ? " vk-prev-valores-3" : "")} style={{ display:"grid", gridTemplateColumns: Array([incluiArq, engAtiva, marcAtiva].filter(Boolean).length || 1).fill("1fr").join(" 0.5px "), gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
@@ -70247,6 +70360,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 <div className="no-print" style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round(engCI/areaTot*100)/100)}/m²</div>
               )}
             </div>}
+            {(incluiArq || engAtiva) && marcAtiva && <div style={{ background:LN }} />}
+            {marcAtiva && <div data-vk-prev-valor-marcenaria style={{ paddingLeft: (incluiArq || engAtiva) ? 20 : 0 }}>
+              <div style={tag}>Marcenaria{(incluiArq || engAtiva) && <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}> (Opcional)</span>}</div>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+                <span title={valoresVemTpl ? "Editado pelo Template" : "60% da arquitetura calculada — edite no Template"}>{fmtV(marcCI)}</span>
+              </div>
+            </div>}
           </div>
           {/* Resumo informativo de impostos. Desde o Deploy 1 da refatoração
               de pagamento, o toggle e o input de alíquota vivem APENAS no
@@ -70277,6 +70397,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             valorEng={engCIEdit}
             incluiArq={incluiArq}
             incluiEng={incluiEng}
+            valorMarc={marcCIEdit}
+            incluiMarc={marcAtiva}
             accent="#111"
             pixTexto={pixEdit}
           />
@@ -70288,8 +70410,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             onClick={() => {
               const newId = Date.now();
               setEscopoState(prev => {
-                const semEng = prev.filter(b => !b.isEng);
-                const eng = prev.filter(b => b.isEng);
+                const semEng = prev.filter(b => !b.isEng && !b.isMarc);
+                const eng = prev.filter(b => b.isEng || b.isMarc);
                 return [...semEng, { etapaId:newId, titulo:"", objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true }, ...eng];
               });
             }}
@@ -70530,6 +70652,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               if (p.toLowerCase().includes("engenharia")) {
                 if (!engAtiva) return false; // toggle desligado OU eng não isolada
               }
+              if (/marcenaria/i.test(p) && !marcAtiva) return false;
+              if (/arquitet/i.test(p) && !incluiArq) return false;
               return true;
             }).map((p, i) => (
             <div key={i} style={{ ...bl, marginBottom:6 }}>
@@ -70850,13 +70974,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
     tx.apresentacao !== undefined ? tx.apresentacao : TPL_DEFAULT_APRESENTACAO
   );
   const [escopo, setEscopo] = useState(
-    tx.escopo !== undefined ? tx.escopo : txtFormatarEscopoComoTexto(TXT_DEFAULT_ESCOPO_ETAPAS)
+    tx.escopo !== undefined ? tx.escopo : txtFormatarEscopoComoTexto(txtEscopoPadraoDoOrcamento(safeData))
   );
   const [naoInclusos, setNaoInclusos] = useState(
-    tx.naoInclusos !== undefined ? tx.naoInclusos : txtFormatarListaComoTexto(TXT_DEFAULT_NAO_INCLUSOS)
+    tx.naoInclusos !== undefined ? tx.naoInclusos : txtFormatarListaComoTexto(txtNaoInclusosPadraoDoOrcamento(safeData))
   );
   const [prazo, setPrazo] = useState(
-    tx.prazo !== undefined ? tx.prazo : txtFormatarListaComoTexto(TXT_DEFAULT_PRAZO)
+    tx.prazo !== undefined ? tx.prazo : txtFormatarListaComoTexto(txtPrazoPadraoDoOrcamento(safeData))
   );
   const [aceite, setAceite] = useState(
     tx.aceite !== undefined ? tx.aceite : TXT_DEFAULT_ACEITE
@@ -70875,6 +70999,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
   );
   const [valorEng, setValorEng] = useState(
     tv.valorEng != null ? Number(tv.valorEng) : (Number(calcRef.precoEng) || 0)
+  );
+  // Marcenaria: 60% da arquitetura calculada (editável aqui)
+  const incluiMarcV = !!safeData.incluiMarcenaria;
+  const [valorMarc, setValorMarc] = useState(
+    tv.valorMarc != null ? Number(tv.valorMarc)
+      : (calcRef.precoMarc != null ? Number(calcRef.precoMarc) : orcPrecoMarcenaria(calcRef.precoArq))
   );
 
   // Pagamento (Fase 6c) — descontos do antecipado e quantidade de parcelas
@@ -71044,6 +71174,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
       valores: {
         valorArq:   Number(valorArq)   || 0,
         valorEng:   Number(valorEng)   || 0,
+        ...(incluiMarcV ? { valorMarc: Number(valorMarc) || 0 } : {}),
         descArq:    Number(descArq)    || 0,
         descPacote: Number(descPacote) || 0,
         parcArq:    Math.max(1, Math.round(Number(parcArq) || 1)),
@@ -71463,12 +71594,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
       <div id="secao-valores" style={card}>
         <div style={cardTitle}>Valores</div>
         <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 14 }}>
-          Edite manualmente os valores de Arquitetura e Engenharia. O total e os recálculos de pagamento atualizam em tempo real.
+          Edite manualmente os valores{incluiMarcV ? " de cada projeto" : " de Arquitetura e Engenharia"}. O total e os recálculos de pagamento atualizam em tempo real.
         </div>
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: (safeData.incluiArq !== false && safeData.incluiEng) ? "1fr 1fr" : "1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           gap: 16,
         }}>
           {(safeData.incluiArq !== false) && (
@@ -71483,6 +71614,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
               <TplInputMoeda valor={valorEng} onChange={setValorEng} />
             </div>
           )}
+          {incluiMarcV && (
+            <div data-vk-tpl-valor-marcenaria>
+              <label style={labelTextarea}>Marcenaria</label>
+              <TplInputMoeda valor={valorMarc} onChange={setValorMarc} />
+              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 4 }}>Calculado: 60% da arquitetura</div>
+            </div>
+          )}
         </div>
 
         {/* Total dinâmico — atualiza inline conforme o usuário edita */}
@@ -71493,7 +71631,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
         }}>
           <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Total</span>
           <span style={{ fontSize: 18, color: "#262421", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
+            {fmtBRL(((safeData.incluiArq !== false) ? (Number(valorArq) || 0) : 0) + (safeData.incluiEng ? (Number(valorEng) || 0) : 0) + (incluiMarcV ? (Number(valorMarc) || 0) : 0))}
           </span>
         </div>
       </div>
@@ -71665,7 +71803,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           const incluiEngV = !!safeData.incluiEng;
           const valorArqN  = Number(valorArq) || 0;
           const valorEngN  = Number(valorEng) || 0;
-          const valorPacN  = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
+          const valorMarcN = incluiMarcV ? (Number(valorMarc) || 0) : 0;
+          const valorPacN  = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0) + valorMarcN;
+          const valorApenasN = incluiArqV ? valorArqN : incluiEngV ? valorEngN : valorMarcN;
+          const qtdPartes = [incluiArqV, incluiEngV, incluiMarcV].filter(Boolean).length;
 
           // Ordem fixa das formas, igual Etapa 5
           const ordemFormas = ["antecipado", "parcelas", "final", "etapa"];
@@ -71735,7 +71876,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
 
           // Render do resumo lateral do card
           const renderResumo = (tipo) => {
-            const base = tipo === "arq" ? valorArqN : valorPacN;
+            const base = tipo === "arq" ? valorApenasN : valorPacN;
             const blocos = [];
             if (formasParaCards.includes("antecipado")) {
               const desc = tipo === "arq" ? descArq : descPacote;
@@ -71814,6 +71955,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           });
           const temIso = isoladasTpl.size > 0;
           let pctTotal = 0, valorTotal = 0, qtdEtapasMostradas = 0;
+          if (incluiMarcV) { valorTotal += valorMarcN; qtdEtapasMostradas++; }
           if (temIso) {
             etapasFiltradas.forEach(e => {
               if (e.eng && isoladasTpl.has(5)) {
@@ -71827,7 +71969,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
               if (!e.eng) pctTotal += e.pct;
               qtdEtapasMostradas++;
             });
-            valorTotal = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
+            valorTotal = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0) + valorMarcN;
           }
           const mostraEtUnica = qtdEtapasMostradas >= 1;
           const mostraCompletas = qtdEtapasMostradas >= 2;
@@ -71841,9 +71983,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           const completoEco = baseCompleto - completoAnt;
           const completoParcVal = baseCompleto / Math.max(1, parcPacCtrt);
 
-          const mostraPacote = incluiArqV && incluiEngV;
-          const tituloApenas = (incluiArqV && !incluiEngV) ? "Apenas Arquitetura"
-                            : (!incluiArqV && incluiEngV) ? "Apenas Engenharia"
+          const mostraPacote = qtdPartes >= 2;
+          const tituloApenas = incluiArqV ? "Apenas Arquitetura"
+                            : incluiEngV ? "Apenas Engenharia"
+                            : incluiMarcV ? "Apenas Marcenaria"
                             : "Apenas Arquitetura";
 
           return (
@@ -71867,7 +72010,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
                         <span>ou</span>
                         <span style={{ flex: 1, height: 0, borderTop: "0.5px solid #e5e7eb" }}></span>
                       </div>
-                      {renderCard("pac", "Pacote Arq + Eng")}
+                      {renderCard("pac", "Pacote " + [incluiArqV && "Arq", incluiEngV && "Eng", incluiMarcV && "Marcenaria"].filter(Boolean).join(" + "))}
                     </>
                   )}
                 </>
@@ -71921,6 +72064,20 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
                         </div>
                       );
                     })}
+                    {incluiMarcV && (
+                      <div className="vk-tpl-fp2-etapa-row incluida eng" data-vk-tpl-etapa-marcenaria>
+                        <span className="vk-tpl-fp2-checkbox" style={{ opacity: 0.5, cursor: "default" }} title="Incluída — desligue a Marcenaria no orçamento para tirar">
+                          <span className="vk-tpl-fp2-checkbox-inner">✓</span>
+                        </span>
+                        <span>
+                          <input type="text" className="vk-tpl-fp2-etapa-nome" value="Projeto de Marcenaria" readOnly />
+                          <div style={{ fontSize: 10.5, color: "#9ca3af", paddingLeft: 4 }}>Composição interna · Materiais · Iluminação</div>
+                        </span>
+                        <span style={{ textAlign: "center", color: "#9ca3af" }}>—</span>
+                        <span className="vk-tpl-fp2-etapa-valor">{fmtBRLfp(Math.round(valorMarcN * 100) / 100)}</span>
+                        <span></span>
+                      </div>
+                    )}
                     {incluiArqV && (
                       <div style={{ padding: "8px 14px" }}>
                         <button type="button" onClick={adicionarEtapaTpl}
@@ -72316,24 +72473,37 @@ function proximoIdOrcamento(data) {
   return "ORC-" + String(orcMaiorNumeroUsado(data) + 1).padStart(4, "0");
 }
 
+// Projeto de Marcenaria: 60% da arquitetura CALCULADA (sem imposto) —
+// edição manual do valor da arquitetura não mexe na marcenaria.
+const ORC_FATOR_MARCENARIA = 0.6;
+function orcPrecoMarcenaria(precoArq) {
+  return Math.round((Number(precoArq) || 0) * ORC_FATOR_MARCENARIA * 100) / 100;
+}
+
 // Arquitetura e engenharia (sem imposto) de uma proposta — ou da raiz do
 // orçamento, se não há proposta —, respeitando o que foi INCLUÍDO: o cálculo
 // guarda precoEng mesmo quando a engenharia ficou de fora da proposta.
+// Marcenaria (marc) só quando incluída: valor da proposta, do cálculo ou
+// 60% da arquitetura calculada (orçamentos de antes da marcenaria).
 function orcValoresBase(orc, prop) {
   const o = orc || {};
   const res = o.resultado || {};
   const incArq = ((prop && prop.incluiArq != null) ? prop.incluiArq : o.incluiArq) !== false;
   const incEng = ((prop && prop.incluiEng != null) ? prop.incluiEng : o.incluiEng) !== false;
-  let arq, eng;
+  const incMarc = !!((prop && prop.incluiMarcenaria != null) ? prop.incluiMarcenaria : o.incluiMarcenaria);
+  let arq, eng, marc;
   if (prop) {
     const c = prop.calculo || {};
     arq = prop.arqEdit != null ? prop.arqEdit : (c.precoArq != null ? c.precoArq : (res.precoArq || 0));
     eng = prop.engEdit != null ? prop.engEdit : (c.precoEng != null ? c.precoEng : (res.precoEng || 0));
+    marc = prop.marcEdit != null ? prop.marcEdit
+      : (c.precoMarc != null ? c.precoMarc : orcPrecoMarcenaria(c.precoArq != null ? c.precoArq : res.precoArq));
   } else {
     arq = res.precoArq || 0;
     eng = res.precoEng || 0;
+    marc = res.precoMarc != null ? res.precoMarc : orcPrecoMarcenaria(res.precoArq);
   }
-  return { arq: incArq ? (Number(arq) || 0) : 0, eng: incEng ? (Number(eng) || 0) : 0 };
+  return { arq: incArq ? (Number(arq) || 0) : 0, eng: incEng ? (Number(eng) || 0) : 0, marc: incMarc ? (Number(marc) || 0) : 0 };
 }
 
 // Valor total do orçamento na lista (tabela, card, ordenação): o que o
@@ -72343,19 +72513,19 @@ function orcValorTotal(orc) {
   const ult = props.length > 0 ? props[props.length - 1] : null;
   if (ult && ult.valorTotalExibido != null) return ult.valorTotalExibido;
   const v = orcValoresBase(orc, ult);
-  return v.arq + v.eng;
+  return v.arq + v.eng + v.marc;
 }
 
 // Desconto, nº de parcelas e rótulo que o modal de Ganho propõe — da versão
 // ESCOLHIDA como fechada (`prop`), não da última: com v1 e v2 enviadas e a
 // v1 aceita, o fechamento tem de sair das condições da v1.
-function orcOpcoesDoGanho(orc, prop, inclArq, inclEng, etapas) {
+function orcOpcoesDoGanho(orc, prop, inclArq, inclEng, etapas, inclMarc) {
   const o = orc || {};
   const tipoPgto = (prop && prop.tipoPgto) || o.tipoPagamento || o.tipoPgto || "padrao";
   const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
   if (tipoPgto === "padrao") {
-    // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
-    const ehPacote = inclArq && inclEng;
+    // Dois ou mais (Arq, Eng, Marcenaria) = pacote completo | só um = individual
+    const ehPacote = [inclArq, inclEng, inclMarc].filter(Boolean).length >= 2;
     const descArq = pick(prop?.descArq, o.descontoEtapa, o.descArq, 5);
     const parcArq = pick(prop?.parcArq, o.parcelasEtapa, o.parcArq, 3);
     const descPac = pick(prop?.descPacote, o.descontoPacote, o.descPacote, 10);
@@ -72363,7 +72533,7 @@ function orcOpcoesDoGanho(orc, prop, inclArq, inclEng, etapas) {
     return {
       descAntecipado: ehPacote ? descPac : descArq,
       qtdParcelado:   ehPacote ? parcPac : parcArq,
-      blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
+      blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : inclEng ? "Apenas Engenharia" : inclMarc ? "Apenas Marcenaria" : "Apenas Arquitetura"),
     };
   }
   // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
@@ -72418,7 +72588,7 @@ function orcConferencia(e) {
   const desc = Math.max(Number(x.descArq) || 0, Number(x.descPac) || 0);
   return [
     { id: "ref", etapa: 1, bloqueia: true, ok: tem(x.referencia), texto: "Referência do projeto" },
-    { id: "escopo", etapa: 1, bloqueia: true, ok: !!(x.incluiArq || x.incluiEng), texto: "Arquitetura ou Engenharia incluída" },
+    { id: "escopo", etapa: 1, bloqueia: true, ok: !!(x.incluiArq || x.incluiEng || x.incluiMarcenaria), texto: "Arquitetura, Engenharia ou Marcenaria incluída" },
     { id: "definicoes", etapa: 1, bloqueia: true, ok: x.definicoesOk !== false, texto: "Tipo de obra, projeto, padrão e tamanho" },
     { id: "comodos", etapa: 2, bloqueia: true, ok: !!x.temComodos && Number(x.total) > 0, texto: "Cômodos e valor calculado" },
     { id: "formas", etapa: 3, bloqueia: true, ok: (x.formas || []).length > 0, texto: "Pelo menos uma forma de pagamento" },
@@ -74971,12 +75141,13 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   // Precisamos dos valores LÍQUIDOS pra aplicar comImp() corretamente.
   // orcValoresBase zera a parte que não foi incluída na proposta: o cálculo
   // guarda precoEng mesmo com a engenharia de fora, e o ganho a somava.
-  const { arq: baseArq, eng: baseEng } = orcValoresBase(orc, ultPropImp);
+  const { arq: baseArq, eng: baseEng, marc: baseMarc } = orcValoresBase(orc, ultPropImp);
 
   // ── Estados principais ──
   const [incluirImposto, setIncluirImposto] = useState(temImpostoOrc);   // começa marcado se orçamento tem imposto
   const [inclArq, setInclArq]             = useState(baseArq > 0);
   const [inclEng, setInclEng]             = useState(baseEng > 0);
+  const [inclMarc, setInclMarc]           = useState(baseMarc > 0);
   const [etapas, setEtapas]               = useState([]);                // preenchido no useEffect
   const [modoEtapas, setModoEtapas]       = useState(false);
   const [jaRecebida, setJaRecebida]       = useState(false);   // 1ª parcela já caiu na conta
@@ -75007,8 +75178,10 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   // Valores efetivos (atuais)
   const orcArq = comImp(baseArq);
   const orcEng = comImp(baseEng);
+  const orcMarc = comImp(baseMarc);
   const temArq = orcArq > 0;
   const temEng = orcEng > 0;
+  const temMarc = orcMarc > 0;
 
   // ── Calcula etapas base (só tipo "etapas") — depende de orcArq/orcEng (e portanto imposto) ──
   function calcularEtapasBase() {
@@ -75026,6 +75199,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
     const totalArqCI = orcArq;
     const totalEngCI = orcEng;
+    // Marcenaria não é etapa de arquitetura: entra como linha própria no fim
+    // (id "marc"), quando fez parte da proposta.
+    const linhaMarc = temMarc ? [{ id: "marc", nome: "Projeto de Marcenaria", pct: 0, valor: orcMarc, marcado: true }] : [];
     return etapasOrc
       // Filtros:
       // • Engenharia (id=5): só aparece se o orc tem Eng (temEng)
@@ -75046,7 +75222,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
           ? totalEngCI
           : Math.round(totalArqCI * pct / 100 * 100) / 100;
         return { id: e.id, nome: e.nome, pct, valor, marcado: true };
-      });
+      }).concat(linhaMarc);
   }
 
   // Quando incluirImposto muda, recalcula as etapas preservando o estado "marcado"
@@ -75069,22 +75245,24 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
   // Da versão escolhida como fechada (ultPropImp = propostas[iProp]), não da
   // última — ver orcOpcoesDoGanho.
-  const opcoesOrcamento = orcOpcoesDoGanho(orc, ultPropImp, inclArq, inclEng, etapas);
+  const opcoesOrcamento = orcOpcoesDoGanho(orc, ultPropImp, inclArq, inclEng, etapas, inclMarc);
 
   // ── Cálculos derivados ──
   // No tipo "etapas": propTotal = soma das etapas MARCADAS (valor editável)
   // No tipo "padrão": propTotal = Arq (se marcado) + Eng (se marcado)
-  let propArq, propEng, propTotal;
+  let propArq, propEng, propMarc, propTotal;
   if (ehTipoEtapas) {
     // Soma das etapas marcadas
     propTotal = Math.round(etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
-    // Para distribuir no resumo: Arq = soma etapas marcadas exceto id=5 (Eng) ; Eng = etapa id=5 se marcada
-    propArq = Math.round(etapas.filter(e => e.marcado && e.id !== 5).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
-    propEng = Math.round((propTotal - propArq) * 100) / 100;
+    // Para distribuir no resumo: Arq = soma etapas marcadas exceto id=5 (Eng) e "marc" ; Eng = etapa id=5 se marcada
+    propArq = Math.round(etapas.filter(e => e.marcado && e.id !== 5 && e.id !== "marc").reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
+    propMarc = Math.round(etapas.filter(e => e.marcado && e.id === "marc").reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
+    propEng = Math.round((propTotal - propArq - propMarc) * 100) / 100;
   } else {
     propArq = inclArq ? orcArq : 0;
     propEng = inclEng ? orcEng : 0;
-    propTotal = propArq + propEng;
+    propMarc = inclMarc ? orcMarc : 0;
+    propTotal = propArq + propEng + propMarc;
   }
 
   // Desconto é derivado do totalFechado (fonte única da verdade: totalFechado)
@@ -75093,11 +75271,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     ? (Math.round(((propTotal - totalFechado) / propTotal) * 10000) / 100) || 0
     : 0;
 
-  // Distribui proporcional (Arq/Eng do total fechado)
-  let fecArq = 0, fecEng = 0;
+  // Distribui proporcional (Arq/Marcenaria/Eng do total fechado). A
+  // engenharia fica com o resto, como antes — no financeiro, a marcenaria
+  // entra junto da arquitetura (valor da parcela menos a engenharia).
+  let fecArq = 0, fecEng = 0, fecMarc = 0;
   if (propTotal > 0) {
     fecArq = Math.round(totalFechado * (propArq / propTotal) * 100) / 100;
-    fecEng = Math.round((totalFechado - fecArq) * 100) / 100;
+    fecMarc = Math.round(totalFechado * (propMarc / propTotal) * 100) / 100;
+    fecEng = Math.round((totalFechado - fecArq - fecMarc) * 100) / 100;
   }
   const descontoRs = Math.round((propTotal - totalFechado) * 100) / 100;
 
@@ -75140,7 +75321,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     if (ehTipoEtapas) {
       propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
     } else {
-      propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
+      propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0) + (inclMarc ? orcMarc : 0);
     }
     const descBase = opcoesOrcamento.descAntecipado;
     const qtdBase  = Math.max(1, parseInt(opcoesOrcamento.qtdParcelado) || 1);
@@ -75150,7 +75331,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     setParcelas(gerarParcelasIguais(qtdBase, totalCalc, "Parcela"));
     setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng]);
+  }, [inclArq, inclEng, inclMarc]);
 
   // ── Recalcula total quando etapas marcadas/valores mudam (tipo etapas) ──
   useEffect(() => {
@@ -75216,15 +75397,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   }, [totalFechado]);
 
   // ── Handlers ──
+  // Liga/desliga uma parte do escopo — sempre fica pelo menos uma.
   function toggleEscopo(key) {
-    if (key === "arq") {
-      if (!inclArq) setInclArq(true);
-      else if (inclEng) setInclArq(false);
-    }
-    if (key === "eng") {
-      if (!inclEng) setInclEng(true);
-      else if (inclArq) setInclEng(false);
-    }
+    const atual = { arq: inclArq, eng: inclEng, marc: inclMarc };
+    const ligados = Object.values(atual).filter(Boolean).length;
+    if (atual[key] && ligados <= 1) return;
+    if (key === "arq") setInclArq(!inclArq);
+    if (key === "eng") setInclEng(!inclEng);
+    if (key === "marc") setInclMarc(!inclMarc);
   }
 
   function toggleEtapa(etapaId) {
@@ -75395,8 +75575,10 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
       aliqImposto: incluirImposto ? aliqImp : 0,
       inclArq,
       inclEng,
+      inclMarc,
       valorArqFechado: fecArq,
       valorEngFechado: fecEng,
+      valorMarcFechado: fecMarc,
       valorTotalFechado: totalFechado,
       descontoPct,
       descontoRs,
@@ -75486,7 +75668,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                   const atual = i === iProp;
                   const valor = p.valorTotalExibido != null
                     ? p.valorTotalExibido
-                    : ((p.arqEdit != null ? p.arqEdit : (p.calculo?.precoArq || 0)) + (p.engEdit != null ? p.engEdit : (p.calculo?.precoEng || 0)));
+                    : (() => { const v = orcValoresBase(orc, p); return v.arq + v.eng + v.marc; })();
                   return (
                     <button key={i} type="button" onClick={() => aoTrocarVersao && aoTrocarVersao(i)}
                       style={{ flex:"1 1 160px", textAlign:"left", cursor: atual ? "default" : "pointer",
@@ -75533,7 +75715,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                       const fatorAntigo = (incluirImposto && aliqImp > 0) ? (1 / (1 - aliqImp/100)) : 1;
                       novoProp = Math.round((somaMarcadas / fatorAntigo) * fator * 100) / 100;
                     } else {
-                      novoProp = ((inclArq ? baseArq : 0) + (inclEng ? baseEng : 0)) * fator;
+                      novoProp = ((inclArq ? baseArq : 0) + (inclEng ? baseEng : 0) + (inclMarc ? baseMarc : 0)) * fator;
                     }
                     const novoTotal = Math.round(novoProp * (1 - descAtual/100) * 100) / 100;
                     setTotalFechado(novoTotal);
@@ -75606,6 +75788,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                 {[
                   { key:"arq", label:"Arquitetura", valor:orcArq, marcado:inclArq, disponivel:temArq },
                   { key:"eng", label:"Engenharia",  valor:orcEng, marcado:inclEng, disponivel:temEng },
+                  ...(temMarc ? [{ key:"marc", label:"Marcenaria", valor:orcMarc, marcado:inclMarc, disponivel:true }] : []),
                 ].map(item => {
                   const bord = !item.disponivel ? "#e5e7eb" : (item.marcado ? "#262421" : "#e5e7eb");
                   return (
@@ -75809,6 +75992,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                 <span>Arquitetura</span><span>{fmtBRL(fecArq)}</span>
               </div>
             )}
+            {fecMarc > 0 && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
+                <span>Marcenaria</span><span>{fmtBRL(fecMarc)}</span>
+              </div>
+            )}
             {inclEng && (
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
                 <span>Engenharia</span><span>{fmtBRL(fecEng)}</span>
@@ -75886,7 +76074,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                   <table style={{ width:"100%", borderCollapse:"collapse", minWidth: fecEng > 0 ? 520 : 320 }}>
                     <thead><tr style={{ background:"#f9fafb" }}>
                       <th style={{ ...th, textAlign:"left" }}>Parcela</th>
-                      <th style={th}>Arquitetura</th>
+                      <th style={th}>{fecMarc > 0 ? (fecArq > 0 ? "Arquitetura + Marcenaria" : "Marcenaria") : "Arquitetura"}</th>
                       {fecEng > 0 && <th style={th}>Engenharia</th>}
                       {fecEng > 0 && <th style={th}>Parceiros (custo)</th>}
                       {fecEng > 0 && <th style={th}>Reserva eng.</th>}
@@ -76203,7 +76391,8 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
   const [engAberto, setEngAberto] = useState(false);
   const fmt2   = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const hasRep = calculo.nRep > 1;
-  const totalGeral = calculo.precoArq + calculo.precoEng;
+  const precoMarc = Number(calculo.precoMarc) || 0;
+  const totalGeral = calculo.precoArq + calculo.precoEng + precoMarc;
   const m2Total = calculo.areaTot > 0 ? Math.round(totalGeral / calculo.areaTot * 100) / 100 : 0;
 
   // Imposto inside-out: total já é o líquido; bruto = liquido / (1 - aliq/100)
@@ -76327,6 +76516,26 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MARCENARIA — 60% da arquitetura calculada */}
+      {precoMarc > 0 && (
+        <div data-vk-resumo-marcenaria style={{ paddingTop:14, marginTop:14, borderTop:"2px solid #d1d5db" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Marcenaria</span>
+              {totalGeral > 0 && (
+                <span style={{ fontSize:11, fontWeight:500, color:"#9ca3af" }}>
+                  {Math.round(precoMarc / totalGeral * 100)}%
+                </span>
+              )}
+            </div>
+            <div data-vk-resumo-vals style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:14.5, fontWeight:700, color:"#262421" }}>{fmt2(precoMarc)}</span>
+              <span style={{ fontSize:12, color:"#828a98" }}>{Math.round(ORC_FATOR_MARCENARIA * 100)}% da arquitetura</span>
+            </div>
+          </div>
         </div>
       )}
     </>
@@ -77151,7 +77360,7 @@ function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56,
 //   accent: cor accent do template ('#111' Editorial, '#fbbf24' Direto)
 //   incluiEng: se Engenharia faz parte do escopo (passado pra cálculo)
 //   pixTexto: texto do PIX (string ou null) — exibido embaixo da tabela
-function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq = true, incluiEng, accent, pixTexto }) {
+function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq = true, incluiEng, valorMarc = 0, incluiMarc = false, accent, pixTexto }) {
   if (!formaPagamento) return null;
   const fp = formaPagamento;
   const formas        = fp.formas        || [];
@@ -77179,8 +77388,11 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
   //     E user marcou 'pac'. Sem um dos dois, "Pacote" vira redundante.
   //   - Caso especial: incluiArq=true e incluiEng=false → mostra só "Apenas Arquitetura"
   //                    incluiArq=false e incluiEng=true → mostra só "Apenas Engenharia"
-  const showPacote = contratacoes.includes('pac') && incluiArq && incluiEng;
-  const showArq    = contratacoes.includes('arq') && (incluiArq || incluiEng);
+  // Marcenaria (linha própria, 60% da arq): conta como mais uma parte do
+  // pacote; sozinha, a coluna vira "Apenas Marcenaria".
+  const qtdPartes  = [incluiArq, incluiEng, incluiMarc].filter(Boolean).length;
+  const showPacote = contratacoes.includes('pac') && qtdPartes >= 2;
+  const showArq    = contratacoes.includes('arq') && qtdPartes >= 1;
   const temAntecipado = formas.includes('antecipado');
   const recPacoteSemAnt = !temAntecipado && showPacote
                        && (formas.includes('parcelas') || formas.includes('final'));
@@ -77188,8 +77400,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
   // Patch (Toggle Arq/Eng): título da coluna "showArq" muda conforme o que
   // está incluído. Se só Eng, vira "Apenas Engenharia". Caso contrário,
   // "Apenas Arquitetura".
-  const labelApenas = (incluiArq && !incluiEng) ? 'Apenas Arquitetura'
-                    : (!incluiArq && incluiEng) ? 'Apenas Engenharia'
+  const labelApenas = incluiArq ? 'Apenas Arquitetura'
+                    : incluiEng ? 'Apenas Engenharia'
+                    : incluiMarc ? 'Apenas Marcenaria'
                     : 'Apenas Arquitetura';
 
   // Coluna que recebe o badge "Recomendado": Pacote tem prioridade,
@@ -77198,11 +77411,11 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     ? (showPacote ? 'pac' : (showArq ? 'arq' : null))
     : null;
 
-  const valorPac = valorArq + (incluiEng ? valorEng : 0);
+  const valorPac = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0) + (incluiMarc ? valorMarc : 0);
 
   // Patch (Toggle Arq/Eng): quando arq está OFF e eng está ON, a coluna
   // "arq" representa "Apenas Engenharia" e seu valor deve ser valorEng.
-  const valorApenas = incluiArq ? valorArq : (incluiEng ? valorEng : 0);
+  const valorApenas = incluiArq ? valorArq : (incluiEng ? valorEng : (incluiMarc ? valorMarc : 0));
 
   // Helpers de formatação BR
   const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -77425,7 +77638,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
   //   - Antecipado desmarcado: cards mostram só "Em Mx sem desconto"
   function renderSecaoPorEtapa() {
     if (!temPorEtapa) return null;
-    const etapas = etapaCfg.etapas || [];
+    // Marcenaria entra como linha fixa no fim da tabela (não é etapa da arq).
+    const etapas = [...(etapaCfg.etapas || []).filter(e => !e.marc),
+      ...(incluiMarc ? [{ id: 'marc', nome: 'Projeto de Marcenaria', pct: 0, marc: true }] : [])];
     const isoladasArr = etapaCfg.isoladas || [];
     const isoladasSet = new Set(isoladasArr);
     // Patch 1: novos parâmetros (defaults 5/2 etapa a etapa, 10/4 etapas completas)
@@ -77442,6 +77657,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     let pctTotal = 0;
     let qtdEtapasMostradas = 0;
     etapas.forEach(e => {
+      if (e.marc) { valorTotal += valorMarc; qtdEtapasMostradas++; return; }
       if (e.eng) {
         if (!incluiEng) return; // eng OFF → ignora etapa de eng
         if (!temIso || isoladasSet.has(5)) {
@@ -77457,7 +77673,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
         }
       }
     });
-    if (!temIso) valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
+    if (!temIso) valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0) + (incluiMarc ? valorMarc : 0);
 
     // Decide quais cards aparecer
     const mostraEtapaUnica   = qtdEtapasMostradas >= 1; // etapa a etapa sempre aparece (≥1)
@@ -77506,11 +77722,13 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
             //   isoladasSet vazio = todas incluídas (default)
             //   isoladasSet não-vazio = só os IDs dentro
             // Patch (Toggle Arq/Eng): também filtra por incluiArq/incluiEng.
+            if (et.marc) return true;
             if (et.eng && !incluiEng) return false;
             if (!et.eng && !incluiArq) return false;
             return isoladasSet.size === 0 || isoladasSet.has(et.id);
           }).map(et => {
-            const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
+            const valor = et.marc ? valorMarc : et.eng ? valorEng : valorArq * (et.pct / 100);
+            const fixa = et.eng || et.marc;
             return (
               <div key={et.id} className="vk-bfp-etapas-grid" style={{
                 display: 'grid', gridTemplateColumns: '1fr 60px 110px',
@@ -77518,14 +77736,15 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
                 borderTop: '0.5px solid #f3f4f6',
                 fontSize: 13, color: '#111',
                 alignItems: 'center',
-                background: et.eng ? '#fafbfc' : 'transparent',
+                background: fixa ? '#fafbfc' : 'transparent',
               }}>
                 <span>
                   {et.nome}
                   {et.eng && <span style={{ fontSize: 10, color: '#9ca3af' }}> · Estrutural · Elétrico · Hidrossanitário</span>}
+                  {et.marc && <span style={{ fontSize: 10, color: '#9ca3af' }}> · Composição interna · Materiais · Iluminação</span>}
                 </span>
-                <span style={{ textAlign: 'center', color: et.eng ? '#9ca3af' : '#6b7280' }}>
-                  {et.eng ? '—' : `${et.pct}%`}
+                <span style={{ textAlign: 'center', color: fixa ? '#9ca3af' : '#6b7280' }}>
+                  {fixa ? '—' : `${et.pct}%`}
                 </span>
                 <span style={{ textAlign: 'right', fontWeight: 500 }}>
                   {fmtBRL(Math.round(valor * 100) / 100)}
@@ -77723,6 +77942,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
 function EtapaFormaPagamento({
   // Valores calculados do orçamento (vindos do Form pai)
   valorArq, valorEng, incluiArq, incluiEng,
+  // Marcenaria: linha própria (60% da arquitetura calculada)
+  valorMarc = 0, incluiMarc = false,
   // Estado controlado pelo Form pai (single source of truth)
   formasSelecionadas, setFormasSelecionadas,
   contratacoesSelecionadas, setContratacoesSelecionadas,
@@ -77744,7 +77965,10 @@ function EtapaFormaPagamento({
   const [erroSelecao, setErroSelecao] = useState(false);
   const [erroValidacao, setErroValidacao] = useState('');
 
-  const valorPac = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
+  const valorPac = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0) + (incluiMarc ? valorMarc : 0);
+  // Coluna "Apenas ...": a primeira parte incluída (Arq, senão Eng, senão Marcenaria)
+  const valorApenas = incluiArq ? valorArq : incluiEng ? valorEng : incluiMarc ? valorMarc : 0;
+  const qtdPartes = [incluiArq, incluiEng, incluiMarc].filter(Boolean).length;
 
   // ── Tela 1: Seleção de formas ─────────────────────────────────
   function toggleForma(formaId) {
@@ -77809,13 +78033,13 @@ function EtapaFormaPagamento({
   //   - Se ficar vazio depois da remoção, adiciona 'arq' automaticamente
   //     (ainda há a coluna "Apenas Arq/Eng" pra mostrar)
   useEffect(() => {
-    const semPacote = !incluiArq || !incluiEng;
+    const semPacote = qtdPartes < 2;
     if (semPacote && contratacoesSelecionadas.includes('pac')) {
       const novo = contratacoesSelecionadas.filter(x => x !== 'pac');
       // Garante pelo menos 'arq' selecionado pra não ficar vazio
       setContratacoesSelecionadas(novo.length === 0 ? ['arq'] : novo);
     }
-  }, [incluiArq, incluiEng]);
+  }, [incluiArq, incluiEng, incluiMarc]);
 
   // Estilos compartilhados — alinhados com o onboarding
   // O container usa className 'vk-fp-container' (definido no <style>) para
@@ -78013,7 +78237,7 @@ function EtapaFormaPagamento({
 
   // ── Renderiza resumo lateral ──────────────────────────────────
   function renderResumo(tipo) {
-    const valorBase = tipo === 'arq' ? valorArq : valorPac;
+    const valorBase = tipo === 'arq' ? valorApenas : valorPac;
     const blocos = [];
 
     if (formasParaCards.includes('antecipado')) {
@@ -78099,6 +78323,7 @@ function EtapaFormaPagamento({
     let pctTotal = 0, valorTotal = 0;
     let qtdEtapasMostradas = 0;
     if (temIso) {
+      if (incluiMarc) { valorTotal += valorMarc; qtdEtapasMostradas++; }
       etapas.forEach(e => {
         // Patch (Toggle Arq/Eng): respeita incluiArq/incluiEng também aqui
         if (e.eng && !incluiEng) return;
@@ -78121,7 +78346,8 @@ function EtapaFormaPagamento({
         if (!e.eng) pctTotal += e.pct;
         qtdEtapasMostradas++;
       });
-      valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
+      valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0) + (incluiMarc ? valorMarc : 0);
+      if (incluiMarc) qtdEtapasMostradas++;
     }
 
     // Patch: decide quais blocos de configuração mostrar baseado na quantidade
@@ -78206,6 +78432,22 @@ function EtapaFormaPagamento({
               </div>
             );
           })}
+
+          {/* Marcenaria: linha fixa, sempre incluída quando ligada no orçamento */}
+          {incluiMarc && (
+            <div className="vk-fp-etapa-row incluida eng" data-vk-fp-etapa-marcenaria>
+              <span className="vk-fp-checkbox" style={{ opacity: 0.5, cursor: 'default' }} title="Incluída — desligue a Marcenaria no orçamento para tirar">
+                <span className="vk-fp-checkbox-inner">✓</span>
+              </span>
+              <span>
+                <input type="text" className="vk-fp-etapa-nome" value="Projeto de Marcenaria" readOnly />
+                <div style={{ fontSize: 10.5, color: '#9ca3af', paddingLeft: 4 }}>Composição interna · Materiais · Iluminação</div>
+              </span>
+              <span style={{ textAlign: 'center', color: '#d1d5db' }}>—</span>
+              <span className="vk-fp-etapa-valor">{fmtBRL_FP(Math.round(valorMarc * 100) / 100)}</span>
+              <span></span>
+            </div>
+          )}
 
           {/* Patch (Toggle Arq/Eng): esconde "+ Adicionar etapa" quando arq OFF,
               já que esse botão só cria etapas de arquitetura. */}
@@ -78616,18 +78858,21 @@ function EtapaFormaPagamento({
           //     título correto ("Apenas Arquitetura" ou "Apenas Engenharia")
           //   - Esconde a explicação "Os dois cards marcados..." quando só
           //     1 card está disponível (não tem o que comparar)
-          const mostraPacote = incluiArq && incluiEng;
-          const tituloApenas = (incluiArq && !incluiEng) ? 'Apenas Arquitetura'
-                             : (!incluiArq && incluiEng) ? 'Apenas Engenharia'
+          const mostraPacote = qtdPartes >= 2;
+          const tituloApenas = incluiArq ? 'Apenas Arquitetura'
+                             : incluiEng ? 'Apenas Engenharia'
+                             : incluiMarc ? 'Apenas Marcenaria'
                              : 'Apenas Arquitetura';
+          const partesPacote = [incluiArq && 'Arquitetura', incluiEng && 'Engenharia', incluiMarc && 'Marcenaria'].filter(Boolean);
+          const apenasNome = tituloApenas.replace('Apenas ', '');
           return (
             <div style={{ marginTop: 28, ...S.fadeIn }}>
               <div style={S.perguntaTitulo}>Como o cliente vai poder contratar?</div>
               {mostraPacote && (
                 <div style={S.perguntaSub}>
-                  <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo.
+                  <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só {apenasNome} ou o pacote completo.
                   <div style={{ marginTop: 4 }}>
-                    <strong style={{ color: '#111' }}>Só Pacote marcado</strong> = cliente só pode contratar Arquitetura + Engenharia juntos.
+                    <strong style={{ color: '#111' }}>Só Pacote marcado</strong> = cliente só pode contratar {partesPacote.join(' + ')} juntos.
                   </div>
                 </div>
               )}
@@ -78639,7 +78884,7 @@ function EtapaFormaPagamento({
                     <span>ou</span>
                     <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
                   </div>
-                  {renderCardContratacao('pac', 'Pacote Arq + Eng')}
+                  {renderCardContratacao('pac', 'Pacote ' + [incluiArq && 'Arq', incluiEng && 'Eng', incluiMarc && 'Marcenaria'].filter(Boolean).join(' + '))}
                 </>
               )}
             </div>
@@ -79703,6 +79948,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         areaBruta: bLoja.ab*nLojas+bAnc.ab*nAncoras+bComum.ab+bApto.ab*nAptos+bGalpao.ab*nGalpoes,
         areaPiscina:0, areaTotal:areaTot, areaTot,
         precoArq1, precoArq:precoArq1, precoEng1, precoEng:precoEng1,
+        precoMarc: orcPrecoMarcenaria(precoArq1),
         precoM2Arq: areaTot>0?Math.round(precoArq1/areaTot*100)/100:0,
         precoM2Eng: areaTot>0?Math.round(precoEng1/areaTot*100)/100:0,
         nRep, pctRep, unidades,
@@ -79880,6 +80126,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       areaTotal, areaTot, areaConstruida, areaGaragemUnid, comuns,
       precoArq1, precoArq, precoArqUnid,
       precoEng1, precoEng, precoEngUnid,
+      precoMarc: orcPrecoMarcenaria(precoArq),
       garagem,
       precoM2Arq: areaTot > 0 ? Math.round(precoArq / areaTot * 100) / 100 : 0,
       precoM2Eng: areaTot > 0 ? Math.round(precoEng / areaTot * 100) / 100 : 0,
@@ -80780,7 +81027,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const fmtNum = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
-  const modalTotSI   = calculo ? Math.round(((incluiArq?calculo.precoArq:0) + (incluiEng?calculo.precoEng:0))*100)/100 : 0;
+  const modalTotSI   = calculo ? Math.round(((incluiArq?calculo.precoArq:0) + (incluiEng?calculo.precoEng:0) + (incluiMarcenaria?(calculo.precoMarc||0):0))*100)/100 : 0;
   const modalTotCI   = temImposto && modalTotSI > 0 ? Math.round(modalTotSI/(1-aliqImp/100)*100)/100 : modalTotSI;
   const modalImposto = temImposto ? Math.round((modalTotCI - modalTotSI)*100)/100 : 0;
 
@@ -80894,7 +81141,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       grupoParams: isComercial ? grupoParams : null,
       incluiArq, incluiEng, incluiMarcenaria,
       etapasIsoladas: Array.from(etapasIsoladas),
-      resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
+      resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, precoMarc: calculo?.precoMarc || 0, areaTotal: calculo?.areaTotal || 0 },
       tipoPgto, temImposto, aliqImp,
       descArq, parcArq, descPacote, parcPacote,
       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
@@ -80909,7 +81156,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // ── Passo a passo e conferência (as cinco etapas) ──
   const definicoesOk = !!(tipoObra && tipoProjeto && (isComercial || (padrao && tipologia && tamanho)));
   const conferencia = orcConferencia({
-    referencia, incluiArq, incluiEng, definicoesOk, temComodos, total: modalTotCI,
+    referencia, incluiArq, incluiEng, incluiMarcenaria, definicoesOk, temComodos, total: modalTotCI,
     formas: formasSelecionadas, descArq, descPac: descPacote,
     cidade: esc.cidade, responsavel: _respPrimeiro && _respPrimeiro.nome, cau: _respPrimeiro && _respPrimeiro.cau,
     logo: esc.logo, whatsapp: clienteWA,
@@ -81119,6 +81366,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           valorEng={_valorEngFP}
           incluiArq={incluiArq}
           incluiEng={incluiEng}
+          valorMarc={propostaData.calculo?.precoMarc != null ? propostaData.calculo.precoMarc : orcPrecoMarcenaria(propostaData.calculo?.precoArq)}
+          incluiMarc={!!incluiMarcenaria}
           formasSelecionadas={formasSelecionadas}
           setFormasSelecionadas={setFormasSelecionadas}
           contratacoesSelecionadas={contratacoesSelecionadas}
@@ -82406,6 +82655,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     precoEng:   incluiEng ? calculo.precoEng : 0,
                     precoM2Arq: incluiArq ? calculo.precoM2Arq : 0,
                     precoM2Eng: incluiEng ? calculo.precoM2Eng : 0,
+                    precoMarc:  incluiMarcenaria ? calculo.precoMarc : 0,
                   }} fmtNum={fmtNum} C={C} temImposto={temImposto} aliqImp={aliqImp} />
                 </div>
                 <button

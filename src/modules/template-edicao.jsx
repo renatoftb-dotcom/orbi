@@ -190,13 +190,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
     tx.apresentacao !== undefined ? tx.apresentacao : TPL_DEFAULT_APRESENTACAO
   );
   const [escopo, setEscopo] = useState(
-    tx.escopo !== undefined ? tx.escopo : txtFormatarEscopoComoTexto(TXT_DEFAULT_ESCOPO_ETAPAS)
+    tx.escopo !== undefined ? tx.escopo : txtFormatarEscopoComoTexto(txtEscopoPadraoDoOrcamento(safeData))
   );
   const [naoInclusos, setNaoInclusos] = useState(
-    tx.naoInclusos !== undefined ? tx.naoInclusos : txtFormatarListaComoTexto(TXT_DEFAULT_NAO_INCLUSOS)
+    tx.naoInclusos !== undefined ? tx.naoInclusos : txtFormatarListaComoTexto(txtNaoInclusosPadraoDoOrcamento(safeData))
   );
   const [prazo, setPrazo] = useState(
-    tx.prazo !== undefined ? tx.prazo : txtFormatarListaComoTexto(TXT_DEFAULT_PRAZO)
+    tx.prazo !== undefined ? tx.prazo : txtFormatarListaComoTexto(txtPrazoPadraoDoOrcamento(safeData))
   );
   const [aceite, setAceite] = useState(
     tx.aceite !== undefined ? tx.aceite : TXT_DEFAULT_ACEITE
@@ -215,6 +215,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
   );
   const [valorEng, setValorEng] = useState(
     tv.valorEng != null ? Number(tv.valorEng) : (Number(calcRef.precoEng) || 0)
+  );
+  // Marcenaria: 60% da arquitetura calculada (editável aqui)
+  const incluiMarcV = !!safeData.incluiMarcenaria;
+  const [valorMarc, setValorMarc] = useState(
+    tv.valorMarc != null ? Number(tv.valorMarc)
+      : (calcRef.precoMarc != null ? Number(calcRef.precoMarc) : orcPrecoMarcenaria(calcRef.precoArq))
   );
 
   // Pagamento (Fase 6c) — descontos do antecipado e quantidade de parcelas
@@ -384,6 +390,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
       valores: {
         valorArq:   Number(valorArq)   || 0,
         valorEng:   Number(valorEng)   || 0,
+        ...(incluiMarcV ? { valorMarc: Number(valorMarc) || 0 } : {}),
         descArq:    Number(descArq)    || 0,
         descPacote: Number(descPacote) || 0,
         parcArq:    Math.max(1, Math.round(Number(parcArq) || 1)),
@@ -803,12 +810,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
       <div id="secao-valores" style={card}>
         <div style={cardTitle}>Valores</div>
         <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 14 }}>
-          Edite manualmente os valores de Arquitetura e Engenharia. O total e os recálculos de pagamento atualizam em tempo real.
+          Edite manualmente os valores{incluiMarcV ? " de cada projeto" : " de Arquitetura e Engenharia"}. O total e os recálculos de pagamento atualizam em tempo real.
         </div>
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: (safeData.incluiArq !== false && safeData.incluiEng) ? "1fr 1fr" : "1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           gap: 16,
         }}>
           {(safeData.incluiArq !== false) && (
@@ -823,6 +830,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
               <TplInputMoeda valor={valorEng} onChange={setValorEng} />
             </div>
           )}
+          {incluiMarcV && (
+            <div data-vk-tpl-valor-marcenaria>
+              <label style={labelTextarea}>Marcenaria</label>
+              <TplInputMoeda valor={valorMarc} onChange={setValorMarc} />
+              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 4 }}>Calculado: 60% da arquitetura</div>
+            </div>
+          )}
         </div>
 
         {/* Total dinâmico — atualiza inline conforme o usuário edita */}
@@ -833,7 +847,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
         }}>
           <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Total</span>
           <span style={{ fontSize: 18, color: "#262421", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
+            {fmtBRL(((safeData.incluiArq !== false) ? (Number(valorArq) || 0) : 0) + (safeData.incluiEng ? (Number(valorEng) || 0) : 0) + (incluiMarcV ? (Number(valorMarc) || 0) : 0))}
           </span>
         </div>
       </div>
@@ -1005,7 +1019,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           const incluiEngV = !!safeData.incluiEng;
           const valorArqN  = Number(valorArq) || 0;
           const valorEngN  = Number(valorEng) || 0;
-          const valorPacN  = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
+          const valorMarcN = incluiMarcV ? (Number(valorMarc) || 0) : 0;
+          const valorPacN  = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0) + valorMarcN;
+          const valorApenasN = incluiArqV ? valorArqN : incluiEngV ? valorEngN : valorMarcN;
+          const qtdPartes = [incluiArqV, incluiEngV, incluiMarcV].filter(Boolean).length;
 
           // Ordem fixa das formas, igual Etapa 5
           const ordemFormas = ["antecipado", "parcelas", "final", "etapa"];
@@ -1075,7 +1092,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
 
           // Render do resumo lateral do card
           const renderResumo = (tipo) => {
-            const base = tipo === "arq" ? valorArqN : valorPacN;
+            const base = tipo === "arq" ? valorApenasN : valorPacN;
             const blocos = [];
             if (formasParaCards.includes("antecipado")) {
               const desc = tipo === "arq" ? descArq : descPacote;
@@ -1154,6 +1171,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           });
           const temIso = isoladasTpl.size > 0;
           let pctTotal = 0, valorTotal = 0, qtdEtapasMostradas = 0;
+          if (incluiMarcV) { valorTotal += valorMarcN; qtdEtapasMostradas++; }
           if (temIso) {
             etapasFiltradas.forEach(e => {
               if (e.eng && isoladasTpl.has(5)) {
@@ -1167,7 +1185,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
               if (!e.eng) pctTotal += e.pct;
               qtdEtapasMostradas++;
             });
-            valorTotal = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
+            valorTotal = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0) + valorMarcN;
           }
           const mostraEtUnica = qtdEtapasMostradas >= 1;
           const mostraCompletas = qtdEtapasMostradas >= 2;
@@ -1181,9 +1199,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
           const completoEco = baseCompleto - completoAnt;
           const completoParcVal = baseCompleto / Math.max(1, parcPacCtrt);
 
-          const mostraPacote = incluiArqV && incluiEngV;
-          const tituloApenas = (incluiArqV && !incluiEngV) ? "Apenas Arquitetura"
-                            : (!incluiArqV && incluiEngV) ? "Apenas Engenharia"
+          const mostraPacote = qtdPartes >= 2;
+          const tituloApenas = incluiArqV ? "Apenas Arquitetura"
+                            : incluiEngV ? "Apenas Engenharia"
+                            : incluiMarcV ? "Apenas Marcenaria"
                             : "Apenas Arquitetura";
 
           return (
@@ -1207,7 +1226,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
                         <span>ou</span>
                         <span style={{ flex: 1, height: 0, borderTop: "0.5px solid #e5e7eb" }}></span>
                       </div>
-                      {renderCard("pac", "Pacote Arq + Eng")}
+                      {renderCard("pac", "Pacote " + [incluiArqV && "Arq", incluiEngV && "Eng", incluiMarcV && "Marcenaria"].filter(Boolean).join(" + "))}
                     </>
                   )}
                 </>
@@ -1261,6 +1280,20 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, mod
                         </div>
                       );
                     })}
+                    {incluiMarcV && (
+                      <div className="vk-tpl-fp2-etapa-row incluida eng" data-vk-tpl-etapa-marcenaria>
+                        <span className="vk-tpl-fp2-checkbox" style={{ opacity: 0.5, cursor: "default" }} title="Incluída — desligue a Marcenaria no orçamento para tirar">
+                          <span className="vk-tpl-fp2-checkbox-inner">✓</span>
+                        </span>
+                        <span>
+                          <input type="text" className="vk-tpl-fp2-etapa-nome" value="Projeto de Marcenaria" readOnly />
+                          <div style={{ fontSize: 10.5, color: "#9ca3af", paddingLeft: 4 }}>Composição interna · Materiais · Iluminação</div>
+                        </span>
+                        <span style={{ textAlign: "center", color: "#9ca3af" }}>—</span>
+                        <span className="vk-tpl-fp2-etapa-valor">{fmtBRLfp(Math.round(valorMarcN * 100) / 100)}</span>
+                        <span></span>
+                      </div>
+                    )}
                     {incluiArqV && (
                       <div style={{ padding: "8px 14px" }}>
                         <button type="button" onClick={adicionarEtapaTpl}

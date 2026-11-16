@@ -111,6 +111,87 @@ const TXT_DEFAULT_PRAZO = [
   "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura.",
 ];
 
+// ─── Projeto de Marcenaria ───────────────────────────────────
+// Entra no escopo quando a marcenaria faz parte da proposta — sozinha ou
+// junto da arquitetura/engenharia. Valor: 60% da arquitetura calculada
+// (orcPrecoMarcenaria, em orcamento-teste.jsx).
+const TXT_DEFAULT_ESCOPO_MARCENARIA = {
+  titulo: "Projeto de Marcenaria",
+  objetivo: "Desenvolver o projeto dos móveis planejados dos ambientes, definindo composição interna, materiais, cores, acabamentos e iluminação, com o detalhamento executivo necessário para orçamento, fabricação e instalação pela marcenaria.",
+  itens: [
+    "Levantamento das necessidades de uso e armazenamento de cada ambiente",
+    "Definição do layout e da composição interna dos móveis: portas, gavetas, prateleiras, nichos, cabideiros e divisórias",
+    "Especificação dos materiais e cores da marcenaria: MDF, laminados, lâminas de madeira, laca, vidros e espelhos",
+    "Especificação das ferragens: dobradiças, corrediças, puxadores e sistemas de abertura",
+    "Definição do tipo de pedra das bancadas e do revestimento das paredes junto aos móveis",
+    "Projeto de iluminação da marcenaria: fitas e perfis de LED, spots e pontos elétricos necessários",
+    "Compatibilização com os projetos de arquitetura, elétrico e hidrossanitário",
+    "Ajustes conforme alinhamento com o cliente",
+  ],
+  entregaveis: [
+    "Planta de layout da marcenaria por ambiente",
+    "Vistas e elevações cotadas de cada móvel",
+    "Cortes e detalhes construtivos",
+    "Quantitativo por móvel: portas, gavetas, prateleiras e ferragens",
+    "Memorial de materiais, cores, acabamentos, pedras e revestimentos",
+    "Planta de pontos elétricos e de iluminação da marcenaria",
+    "Imagens 3D dos ambientes",
+  ],
+  obs: "O projeto executivo de marcenaria permite orçar com mais de uma marcenaria sobre a mesma base e reduz erros de fabricação e de instalação. Não inclui a fabricação nem a instalação dos móveis.",
+};
+
+const TXT_PRAZO_MARCENARIA = "Prazo estimado para entrega do Projeto de Marcenaria: 30 dias úteis após contratação.";
+
+// Separador entre blocos do escopo em texto (o mesmo que o modelo divide).
+const TXT_SEPARADOR_ESCOPO = "\n\n────────\n\n";
+
+// Textos padrão do Template conforme o que entrou na proposta. Sem
+// marcenaria, o resultado é exatamente o de antes.
+function txtEscopoPadraoDoOrcamento(d) {
+  const x = d || {};
+  if (!x.incluiMarcenaria) return TXT_DEFAULT_ESCOPO_ETAPAS;
+  const lista = x.incluiArq !== false ? [...TXT_DEFAULT_ESCOPO_ETAPAS] : [];
+  lista.push({ ...TXT_DEFAULT_ESCOPO_MARCENARIA, titulo: `${lista.length + 1}. ${TXT_DEFAULT_ESCOPO_MARCENARIA.titulo}` });
+  return lista;
+}
+function txtNaoInclusosPadraoDoOrcamento(d) {
+  if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_NAO_INCLUSOS;
+  return TXT_DEFAULT_NAO_INCLUSOS.filter(s => !/marcenaria/i.test(s));
+}
+function txtPrazoPadraoDoOrcamento(d) {
+  if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_PRAZO;
+  const lista = d.incluiArq !== false ? [...TXT_DEFAULT_PRAZO] : TXT_DEFAULT_PRAZO.filter(p => !/arquitet/i.test(p));
+  return [...lista, TXT_PRAZO_MARCENARIA];
+}
+
+// Escopo em texto (Template) x marcenaria ligada/desligada depois de o
+// texto ter sido salvo: com a marcenaria e sem bloco dela, acrescenta o
+// bloco padrão numerado em seguida; sem a marcenaria, tira o bloco dela.
+// Sem nada a mudar, devolve o texto como veio.
+function txtEscopoAjustarMarcenaria(texto, incluiMarc) {
+  if (!texto || typeof texto !== "string") return texto;
+  const blocos = texto.split(/\n+─{4,}\n+/g);
+  const ehMarc = (b) => /marcenaria/i.test(String(txtTrimBlocoEscopo(b.trim()).split("\n")[0] || ""));
+  const tem = blocos.some(ehMarc);
+  if (incluiMarc && !tem) {
+    const n = blocos.filter(b => txtTrimBlocoEscopo(b.trim())).length + 1;
+    const bloco = txtFormatarEscopoComoTexto([{ ...TXT_DEFAULT_ESCOPO_MARCENARIA, titulo: `${n}. ${TXT_DEFAULT_ESCOPO_MARCENARIA.titulo}` }]);
+    return texto.replace(/\s+$/, "") + TXT_SEPARADOR_ESCOPO + bloco;
+  }
+  if (!incluiMarc && tem) return blocos.filter(b => !ehMarc(b)).join(TXT_SEPARADOR_ESCOPO);
+  return texto;
+}
+
+// "o projeto arquitetônico, engenharia complementar (...) e o projeto de
+// marcenaria" — a frase de abertura do escopo com o que entrou.
+function txtFraseDoEscopo(incluiArq, incluiEng, incluiMarc) {
+  return txtLista([
+    incluiArq ? "o projeto arquitetônico" : "",
+    incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : "",
+    incluiMarc ? "o projeto de marcenaria (móveis planejados)" : "",
+  ]);
+}
+
 const TXT_DEFAULT_ACEITE =
   "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.";
 

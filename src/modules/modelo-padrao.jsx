@@ -151,7 +151,7 @@ function escopoBlocoLivre(b) {
 function sincronizarEscopoComEtapas(prev, etapasPct) {
   const idsAtivos = new Set((etapasPct || []).map(e => e.id));
   // Remove blocos de etapas que foram excluídas (não-eng e não-livres)
-  const filtrado = (prev || []).filter(b => b.isEng || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
+  const filtrado = (prev || []).filter(b => b.isEng || b.isMarc || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
   // Adiciona blocos de etapas novas (id > 5 = customizadas)
   (etapasPct || []).forEach(et => {
     if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
@@ -357,7 +357,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   const setArqEdit = setArqEditState;
   const setEngEdit = setEngEditState;
   // Flag pra UI saber se deve esconder inputs editáveis (template ativo).
-  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null);
+  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null) || (_tvTpl.valorMarc != null);
+  // Marcenaria (linha própria): valor do Template > proposta travada >
+  // cálculo (60% da arquitetura calculada). Edita-se no Template.
+  const marcEdit = (_tvTpl.valorMarc != null) ? Number(_tvTpl.valorMarc)
+    : (lockEdicao && snap?.marcEdit != null) ? Number(snap.marcEdit)
+    : (calculo.precoMarc != null ? Number(calculo.precoMarc) : orcPrecoMarcenaria(calculo.precoArq));
   const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
@@ -428,6 +433,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
 
   const arqCI = incluiArq ? arqEdit : 0;
   const engCI = incluiEng ? engEdit : 0;
+  const marcAtiva = !!incluiMarcenaria;
+  const marcCI = marcAtiva ? (Number(marcEdit) || 0) : 0;
 
   // Helper: converte valor SEM imposto -> COM imposto (inside calculation)
   // valor_bruto = liquido / (1 - aliq/100). Se temImposto=false, retorna o valor direto.
@@ -440,13 +447,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     : v;
 
   // Recalcula totais com valores editados
-  const totSIEdit   = arqCI + engCI;
+  const totSIEdit   = Math.round((arqCI + engCI + marcCI) * 100) / 100;
   const totCIEdit   = comImposto(totSIEdit);
   const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
   // Base das etapas = só arquitetura com imposto
   const arqCIEdit   = comImposto(arqCI);
   // Engenharia com imposto (para linha separada na tabela de etapas)
   const engCIEdit   = comImposto(engCI);
+  // Marcenaria com imposto (linha própria, como a engenharia)
+  const marcCIEdit  = comImposto(marcCI);
 
   // Etapa isolada — valor proporcional do total
   // Etapas isoladas — múltipla seleção (state local, manipulável inline)
@@ -465,7 +474,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Com isolamento: eng entra apenas se eng estiver isolada
   const engSI           = engAtiva ? engCI : 0;
   const totSIBase       = temIsoladas
-    ? Math.round((arqIsoladaSI + engSI) * 100) / 100
+    ? Math.round((arqIsoladaSI + engSI + marcCI) * 100) / 100
     : totSIEdit;
 
   // Total do pacote em modo etapas — usado tanto no preview quanto no pagamento
@@ -475,7 +484,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     const etapasArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
     const pctAtivo = etapasArqAtivas.reduce((s,e)=>s+Number(e.pct),0);
     // arqCIEdit = arq TOTAL com imposto (base dos cálculos por etapa no preview)
-    return Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0)) * 100) / 100;
+    return Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0) + (marcAtiva ? marcCIEdit : 0)) * 100) / 100;
   })();
   // Subtotal apenas das etapas de arquitetura (sem eng) — para oferecer opção "Apenas Arquitetura"
   const subTotalArqEtapas = (() => {
@@ -485,7 +494,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   })();
 
   // Subtítulo dinâmico — usa engAtiva (não só o toggle, mas também considera isolamento)
-  const subTituloDefault = (incluiArq && engAtiva)
+  const subTituloDefault = marcAtiva
+    ? ((incluiArq || engAtiva)
+      ? `Proposta Comercial de Projetos de ${txtLista([incluiArq && "Arquitetura", engAtiva && "Engenharia", "Marcenaria"])}`
+      : "Proposta Comercial de Projeto de Marcenaria")
+    : (incluiArq && engAtiva)
     ? "Proposta Comercial de Projetos de Arquitetura e Engenharia"
     : (incluiArq && !engAtiva)
       ? "Proposta Comercial de Projetos de Arquitetura"
@@ -599,17 +612,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     { etapaId:3, titulo:"Aprovação na Prefeitura", objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.", itens:["Adequação do projeto às exigências legais e urbanísticas do município","Elaboração dos desenhos técnicos exigidos para aprovação","Montagem da documentação técnica necessária ao processo","Inserção de informações obrigatórias conforme normas municipais","Preparação de pranchas, quadros de áreas e demais peças gráficas","Apoio técnico durante o processo de aprovação","Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura"], entregaveis:["Projeto legal para aprovação","Plantas, cortes, fachadas e implantação conforme exigência municipal","Quadros de áreas","Arquivos e documentação técnica para protocolo"], obs:"Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.", isEng:false },
     { etapaId:4, titulo:"Projeto Executivo", objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.", itens:["Desenvolvimento técnico completo do projeto aprovado","Detalhamento arquitetônico para obra","Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos","Elaboração de desenhos técnicos executivos","Compatibilização arquitetônica com premissas de obra","Apoio técnico para leitura e entendimento do projeto pela equipe executora"], entregaveis:["Planta baixa executiva","Planta de locação e implantação","Planta de cobertura","Cortes e fachadas executivos","Planta de layout e pontos arquitetônicos","Planta de esquadrias e pisos","Detalhamentos construtivos","Quadro de esquadrias e quadro de áreas final"], obs:"É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.", isEng:false },
     { etapaId:5, titulo:"Projetos Complementares de Engenharia", objetivo:"", itens:["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"], entregaveis:[], obs:"", isEng:true },
+    // Marcenaria: bloco próprio, entra quando a marcenaria faz parte da proposta
+    { etapaId:"marc", ...TXT_DEFAULT_ESCOPO_MARCENARIA, itens:[...TXT_DEFAULT_ESCOPO_MARCENARIA.itens], entregaveis:[...TXT_DEFAULT_ESCOPO_MARCENARIA.entregaveis], isEng:false, isMarc:true },
   ];
 
   // Estado do escopo — sincronizado com etapasPct
   const [escopoState, setEscopoState] = useState(() => {
     // Se tem snapshot com escopo salvo, usa ele
+    // (salvo antes da marcenaria existir: ganha o bloco dela no fim)
     if (snap?.escopoState && snap.escopoState.length > 0) {
-      return snap.escopoState;
+      return snap.escopoState.some(b => b.isMarc) ? snap.escopoState
+        : [...snap.escopoState, ESCOPO_BASE.find(b => b.isMarc)];
     }
     // Senão, constrói do zero com base nas etapas ativas
     const idsAtivos = new Set(etapasPct.map(e => e.id));
-    return ESCOPO_BASE.filter(b => b.isEng || idsAtivos.has(b.etapaId));
+    return ESCOPO_BASE.filter(b => b.isEng || b.isMarc || idsAtivos.has(b.etapaId));
   });
 
   // Sincroniza escopo quando etapasPct muda (adiciona/remove etapas)
@@ -625,21 +642,18 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
     const blocos = escopoState.filter(b => {
+      if (b.isMarc) return marcAtiva;
       if (b.isEng) return engAtiva;
       if (!incluiArq) return false;
       if (b.etapaId === 1 && isPadrao) return false;
       if (temIsoladas && !b.isEng && !idsIsolados.has(b.etapaId) && !b.custom) return false;
       return true;
     });
-    let n = 0;
-    return blocos.map(b => {
-      if (!b.isEng) {
-        n++;
-        const semNum = b.titulo.replace(/^\d+\.\s*/, "");
-        return { ...b, tituloNum: `${n}. ${semNum}` };
-      }
-      const semNum = b.titulo.replace(/^\d+\.\s*/, "");
-      return { ...b, tituloNum: `${n+1}. ${semNum}` };
+    // Engenharia e marcenaria no fim, numeradas em sequência.
+    const ordenados = [...blocos.filter(b => !b.isEng && !b.isMarc), ...blocos.filter(b => b.isEng), ...blocos.filter(b => b.isMarc)];
+    return ordenados.map((b, i) => {
+      const semNum = String(b.titulo || "").replace(/^\d+\.\s*/, "");
+      return { ...b, tituloNum: `${i + 1}. ${semNum}` };
     });
   })();
 
@@ -690,19 +704,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     ? [
        ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação."] : []),
        ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
+       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
       ]
     : [
        ...(incluiArq || engAtiva ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
+       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
       ];
 
   // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os
   // textos no template, eles têm prioridade sobre os defaults dinâmicos.
   // Parsing: o template guarda como texto livre; aqui convertemos linhas
   // com bullets ("• item") em arrays estruturados pro modelo renderizar.
+  // Com a marcenaria na proposta, ela não pode sair também em "não inclusos".
   const naoInclTpl = (txTpl.naoInclusos && txTpl.naoInclusos.trim())
-    ? txtParseListaDeTexto(txTpl.naoInclusos).map(l => ({ label: l, sub: null }))
+    ? txtParseListaDeTexto(txTpl.naoInclusos).filter(l => !(marcAtiva && /marcenaria/i.test(l))).map(l => ({ label: l, sub: null }))
     : null;
   const prazoTpl = (txTpl.prazo && txTpl.prazo.trim())
     ? txtParseListaDeTexto(txTpl.prazo)
@@ -710,7 +727,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   const aceiteTpl = (txTpl.aceite && txTpl.aceite.trim()) ? txTpl.aceite : null;
   const apresentacaoTpl = (txTpl.apresentacao && txTpl.apresentacao.trim()) ? txTpl.apresentacao : null;
   const observacoesTpl = (txTpl.observacoes && txTpl.observacoes.trim()) ? txTpl.observacoes : null;
-  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txTpl.escopo : null;
+  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txtEscopoAjustarMarcenaria(txTpl.escopo, marcAtiva) : null;
   // Fase 7: quando o template tem escopo preenchido, edição inline do escopo
   // no preview vira read-only (a fonte canônica é o Template). Botões +/×
   // adicionam/removem items também são escondidos. Quando o template é pulado
@@ -778,7 +795,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       descEtCtrt: descEtCtrtLocal, parcEtCtrt: parcEtCtrtLocal,
       descPacCtrt: descPacCtrtLocal, parcPacCtrt: parcPacCtrtLocal,
       // Edições manuais
-      arqEdit, engEdit, resumoEdit,
+      arqEdit, engEdit, marcEdit, resumoEdit,
       subTituloEdit, validadeEdit, naoInclEdit, prazoEdit,
       responsavelEdit, cauEdit, emailEdit, telefoneEdit,
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
@@ -789,6 +806,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
       valorArqExibido: incluiArq ? (isPadrao ? arqCIEdit : subTotalArqEtapas) : 0,
       valorEngExibido: engAtiva ? engCIEdit : 0,
+      valorMarcExibido: marcAtiva ? marcCIEdit : 0,
       valorTotalExibido: isPadrao
         ? (totCIEdit)
         : totalPacoteEtapas,
@@ -1326,6 +1344,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       if (p.toLowerCase().includes("engenharia")) {
         if (!engAtiva) return false;
       }
+      if (/marcenaria/i.test(p) && !marcAtiva) return false;
+      if (/arquitet/i.test(p) && !incluiArq) return false;
       return true;
     });
 
@@ -1631,6 +1651,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 <div style={D.destaqueNum}>{fmtV(engCI)}</div>
               </div>
             )}
+            {marcAtiva && (
+              <div style={(incluiArq || incluiEng) ? D.destaqueVlrLight : D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Marcenaria</div>
+                <div style={D.destaqueNum}>{fmtV(marcCI)}</div>
+              </div>
+            )}
             {/* Linha sutil de total — formato muda conforme tem imposto ou não */}
             {temImposto ? (
               <div style={D.totalSubtle}>
@@ -1639,7 +1665,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 Total com impostos — <span style={D.totalSubtleB}>{fmtV(totCIEdit)}</span>
               </div>
             ) : (
-              (incluiArq && incluiEng) && (
+              ([incluiArq, incluiEng, marcAtiva].filter(Boolean).length >= 2) && (
                 <div style={D.totalSubtle}>
                   Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totSIEdit)}</span>
                 </div>
@@ -1656,6 +1682,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               valorEng={engCIEdit}
               incluiArq={incluiArq}
               incluiEng={incluiEng}
+              valorMarc={marcCIEdit}
+              incluiMarc={marcAtiva}
               accent="#fbbf24"
               pixTexto={null}
             />
@@ -1672,7 +1700,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             {/* ESCOPO DOS SERVIÇOS — estrutura rica (Versão B do mockup) */}
             <div style={D.secTit}>Escopo dos serviços</div>
             <div style={D.secTexto}>
-              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
+              O projeto compreenderá {txtFraseDoEscopo(incluiArq, incluiEng, marcAtiva)}, conforme detalhado abaixo:
             </div>
 
             {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
@@ -2009,6 +2037,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           /* Bloco "Valores dos projetos" — Arq + Eng lado a lado em mobile.
              Reduz só o padding direito da coluna pra evitar estouro horizontal. */
           .vk-prev-valores-grid > div { padding-right: 8px !important; }
+          /* Arq + Eng + Marcenaria não cabem lado a lado: uma embaixo da outra */
+          .vk-prev-valores-3 { grid-template-columns: 1fr !important; row-gap: 10px !important; }
+          .vk-prev-valores-3 > div { padding-left: 0 !important; }
+          .vk-prev-valores-3 > div:empty { display: none !important; }
           /* 6. Imagens e logos: nunca estouram */
           .vk-prev-editorial img { max-width: 100%; height: auto; }
         }
@@ -2185,7 +2217,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
-            {incluiArq && engAtiva && (
+            {incluiArq && (engAtiva || marcAtiva) && (
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
@@ -2273,7 +2305,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
         </div>
         <div>
 
-          <div className="vk-prev-valores-grid" style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div className={"vk-prev-valores-grid" + ([incluiArq, engAtiva, marcAtiva].filter(Boolean).length >= 3 ? " vk-prev-valores-3" : "")} style={{ display:"grid", gridTemplateColumns: Array([incluiArq, engAtiva, marcAtiva].filter(Boolean).length || 1).fill("1fr").join(" 0.5px "), gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
@@ -2323,6 +2355,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
                 <div className="no-print" style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round(engCI/areaTot*100)/100)}/m²</div>
               )}
             </div>}
+            {(incluiArq || engAtiva) && marcAtiva && <div style={{ background:LN }} />}
+            {marcAtiva && <div data-vk-prev-valor-marcenaria style={{ paddingLeft: (incluiArq || engAtiva) ? 20 : 0 }}>
+              <div style={tag}>Marcenaria{(incluiArq || engAtiva) && <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}> (Opcional)</span>}</div>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+                <span title={valoresVemTpl ? "Editado pelo Template" : "60% da arquitetura calculada — edite no Template"}>{fmtV(marcCI)}</span>
+              </div>
+            </div>}
           </div>
           {/* Resumo informativo de impostos. Desde o Deploy 1 da refatoração
               de pagamento, o toggle e o input de alíquota vivem APENAS no
@@ -2353,6 +2392,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             valorEng={engCIEdit}
             incluiArq={incluiArq}
             incluiEng={incluiEng}
+            valorMarc={marcCIEdit}
+            incluiMarc={marcAtiva}
             accent="#111"
             pixTexto={pixEdit}
           />
@@ -2364,8 +2405,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             onClick={() => {
               const newId = Date.now();
               setEscopoState(prev => {
-                const semEng = prev.filter(b => !b.isEng);
-                const eng = prev.filter(b => b.isEng);
+                const semEng = prev.filter(b => !b.isEng && !b.isMarc);
+                const eng = prev.filter(b => b.isEng || b.isMarc);
                 return [...semEng, { etapaId:newId, titulo:"", objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true }, ...eng];
               });
             }}
@@ -2606,6 +2647,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               if (p.toLowerCase().includes("engenharia")) {
                 if (!engAtiva) return false; // toggle desligado OU eng não isolada
               }
+              if (/marcenaria/i.test(p) && !marcAtiva) return false;
+              if (/arquitet/i.test(p) && !incluiArq) return false;
               return true;
             }).map((p, i) => (
             <div key={i} style={{ ...bl, marginBottom:6 }}>
