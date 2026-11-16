@@ -5163,8 +5163,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   if (pr && pr.serie && pr.serie.length) {
     const dd = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
     const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-    cartao("Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}. `
-      + pr.porStatus.map((x) => `${x.status}: ${x.n}`).join(" · ") + ".", 12 + 40 + 9 + 22 + 6, (x0, y0, lg) => {
+    cartao("Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}. Alto potencial em conversão de vendas.`,
+      12 + 40 + 9 + 22 + 6, (x0, y0, lg) => {
       const st = [["Cadastros", String(pr.total)], ["Últimos 7 dias", String(pr.ultimos7)], ["Últimos 14 dias", String(pr.ultimos14)], ["Melhor dia", `${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`]];
       const cw = lg / st.length;
       st.forEach(([rot, v], q) => {
@@ -5915,7 +5915,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
               ))}
             </div>
             <GraficoProcura resumo={pr} />
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>{pr.porStatus.map((x) => `${x.status}: ${x.n}`).join(" · ")}</div>
+            <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, marginTop: 6 }}>Alto potencial em conversão de vendas.</div>
           </div>
         )}
         {fc && (
