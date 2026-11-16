@@ -41922,8 +41922,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 4. recebimentos mês a mês
   if (rm && rm.meses.length) {
-    cartao("Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no mês do vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.")
-      + " Contratos firmes: as vendas feitas (assinadas ou com o contrato pendente) e o cronograma marcado como contrato. Vendas estimadas: as projeções de venda das unidades e o cronograma.", alturaDoGrafico(ALT_BARRAS),
+    cartao("Recebimentos mês a mês", "Contratos realizados e vendas estimadas, baseadas na procura e nos novos cadastros de clientes.", alturaDoGrafico(ALT_BARRAS),
       (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela([{ t: "Mês", w: 34 }, { t: "Recebido", w: 37, alinhar: "right" }, { t: "Contratos firmes", w: 37, alinhar: "right" },
@@ -42674,7 +42673,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {rm && rm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-receb="1">
-            {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + " Contratos firmes: as vendas feitas (assinadas ou com o contrato pendente) e o cronograma marcado como contrato. Vendas estimadas: as projeções das unidades e o cronograma.")}
+            {titulo(++k, "Recebimentos mês a mês", "Contratos realizados e vendas estimadas, baseadas na procura e nos novos cadastros de clientes.")}
             <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
           </div>
