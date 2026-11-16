@@ -5108,96 +5108,6 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
         .concat([{ total: true, celulas: ["Total", moeda(rm.total.recebido), moeda(rm.total.firme), moeda(rm.total.estimativa), moeda(rm.total.geral)] }]),
       { compacta: true });
   }
-  // 4b. os contratos firmes: um cartão por venda — quem comprou, o valor do
-  // contrato, quanto já entrou (a barra), como se paga e a próxima parcela
-  if (ct && ct.length) {
-    const soma = (k) => ct.reduce((t, c) => t + (Number(c[k]) || 0), 0);
-    const GAP = 4, CH = 27, por = 2;
-    const linhasDeCartoes = Math.ceil(ct.length / por);
-    cartao("Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda - desconto + juros + documentação.",
-      11 + linhasDeCartoes * (CH + GAP) - GAP, (x0, y0, lg) => {
-        // o resumo: quantos, valor, recebido, a receber
-        const resumo = [[`${ct.length} ${ct.length === 1 ? "contrato" : "contratos"}`, ""], ["Valor dos contratos", moeda(soma("total"))],
-          ["Recebido", moeda(soma("recebido"))], ["A receber", moeda(soma("aReceber"))]];
-        void resumo;
-        const cw = lg / resumo.length;
-        resumo.forEach(([rot, v], q) => {
-          const xx = x0 + q * cw;
-          if (!v) { doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(rot, xx, y0 + 6.2); return; }
-          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), xx, y0 + 2.6);
-          doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); cor(TINTA); doc.text(v, xx, y0 + 7.4);
-        });
-        doc.setFont("helvetica", "normal");
-        const w = (lg - GAP * (por - 1)) / por;
-        ct.forEach((c, q) => {
-          const xx = x0 + (q % por) * (w + GAP), yy = y0 + 11 + Math.floor(q / por) * (CH + GAP), PX = 3.5;
-          doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
-          doc.roundedRect(xx, yy, w, CH, 2, 2, "FD");
-          // a unidade e quem comprou, numa linha
-          const uni = String(c.unidade || "").split(" · ").pop() || "—";
-          doc.setFont("helvetica", "bold"); doc.setFontSize(9.4); cor(TINTA); doc.text(uni, xx + PX, yy + 5.6);
-          const uw = doc.getTextWidth(uni);
-          doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); cor(CINZA);
-          doc.text(caber(c.comprador || "", w - 2 * PX - uw - 2), xx + PX + uw + 2, yy + 5.6);
-          // o valor do contrato e a barra do que já entrou
-          doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); cor(TINTA); doc.text(moeda(c.total), xx + PX, yy + 12.2);
-          const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0, bw = w - 2 * PX;
-          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA);
-          doc.text(`${Math.round(f * 100)}% recebido`, xx + w - PX, yy + 12.1, { align: "right" });
-          doc.setFillColor(226, 232, 240); doc.roundedRect(xx + PX, yy + 14, bw, 1.4, 0.7, 0.7, "F");
-          if (f > 0.002) { doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(xx + PX, yy + 14, Math.max(1.4, bw * f), 1.4, 0.7, 0.7, "F"); }
-          // como se paga: o direto (sinal e parcelas) e o financiamento
-          const direto = c.sinal + c.parcelas.soma;
-          const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), moeda(direto)] : null,
-            c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, moeda(c.financiamento)] : null].filter(Boolean);
-          const pw = bw / Math.max(1, comoPaga.length);
-          comoPaga.forEach(([rot, v], z) => {
-            doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA); doc.text(caber(rot, pw - 2), xx + PX + z * pw, yy + 19.6);
-            doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(v, xx + PX + z * pw, yy + 23.4);
-          });
-          doc.setFont("helvetica", "normal");
-        });
-      });
-  }
-  // 4c. a procura: os cadastros do site — números, a curva acumulada e o dia a dia
-  if (pr && pr.serie && pr.serie.length) {
-    const dd = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
-    const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-    cartao("Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}. Alto potencial em conversão de vendas.`,
-      12 + 40 + 9 + 22 + 6, (x0, y0, lg) => {
-      const st = [["Cadastros", String(pr.total)], ["Últimos 7 dias", String(pr.ultimos7)], ["Últimos 14 dias", String(pr.ultimos14)], ["Melhor dia", `${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`]];
-      const cw = lg / st.length;
-      st.forEach(([rot, v], q) => {
-        doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), x0 + q * cw, y0 + 2.6);
-        doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(v, x0 + q * cw, y0 + 7.6);
-      });
-      doc.setFont("helvetica", "normal");
-      const sr = pr.serie, n = sr.length, DIR = 10, passo = (lg - DIR) / n;
-      const cx = (i) => x0 + i * passo + passo / 2;
-      // a curva acumulada
-      const t1 = y0 + 14, h1 = 34, b1 = t1 + h1, maxA = Math.max(1, sr[n - 1].acumulado);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7.4); cor(TINTA); doc.text("Acumulado", x0, t1 - 1);
-      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b1, x0 + lg - DIR, b1);
-      doc.setDrawColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.setLineWidth(0.6);
-      for (let k = 1; k < n; k++) doc.line(cx(k - 1), b1 - sr[k - 1].acumulado / maxA * (h1 - 4), cx(k), b1 - sr[k].acumulado / maxA * (h1 - 4));
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA);
-      sr.forEach((d, k) => { if (k < n - 1 && sr[k + 1].iso.slice(8) === "01") {
-        const yy = b1 - d.acumulado / maxA * (h1 - 4);
-        doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.circle(cx(k), yy, 0.7, "F"); doc.text(String(d.acumulado), cx(k), yy - 1.6, { align: "center" }); } });
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(String(sr[n - 1].acumulado), cx(n - 1) + 1.5, b1 - (h1 - 4) + 1);
-      // o dia a dia
-      const t2 = b1 + 9, h2 = 20, b2 = t2 + h2, maxD = Math.max(1, ...sr.map((d) => d.n));
-      doc.setFontSize(7.4); doc.text("Por dia", x0, t2 - 1);
-      doc.setFont("helvetica", "normal");
-      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b2, x0 + lg - DIR, b2);
-      doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]);
-      sr.forEach((d, k) => { if (d.n > 0) { const h = Math.max(0.4, d.n / maxD * (h2 - 2)); doc.rect(cx(k) - passo * 0.36, b2 - h, passo * 0.72, h, "F"); } });
-      const im = sr.findIndex((d) => d.iso === pr.melhorDia.iso);
-      doc.setFontSize(6.4); cor(TINTA); doc.text(`${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`, cx(im) + passo, b2 - (h2 - 2) + 2);
-      cor(CINZA);
-      sr.forEach((d, k) => { if (d.iso.slice(8) === "01" || k === 0) doc.text(MES[Number(d.iso.slice(5, 7)) - 1] + "/" + d.iso.slice(2, 4), cx(k), b2 + 3.6); });
-    });
-  }
   // 5. fluxo de caixa
   if (fc) {
     if (fc.erro) {
@@ -5297,6 +5207,96 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   if (notasEntrada.length) {
     secao("Entradas — lançamentos");
     tabela(colsNotas, notasEntrada.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das entradas", "", moeda(pc.entradas)] }]), { compacta: true });
+  }
+  // 9b. os contratos firmes: um cartão por venda — quem comprou, o valor do
+  // contrato, quanto já entrou (a barra), como se paga e a próxima parcela
+  if (ct && ct.length) {
+    const soma = (k) => ct.reduce((t, c) => t + (Number(c[k]) || 0), 0);
+    const GAP = 4, CH = 27, por = 2;
+    const linhasDeCartoes = Math.ceil(ct.length / por);
+    cartao("Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda - desconto + juros + documentação.",
+      11 + linhasDeCartoes * (CH + GAP) - GAP, (x0, y0, lg) => {
+        // o resumo: quantos, valor, recebido, a receber
+        const resumo = [[`${ct.length} ${ct.length === 1 ? "contrato" : "contratos"}`, ""], ["Valor dos contratos", moeda(soma("total"))],
+          ["Recebido", moeda(soma("recebido"))], ["A receber", moeda(soma("aReceber"))]];
+        void resumo;
+        const cw = lg / resumo.length;
+        resumo.forEach(([rot, v], q) => {
+          const xx = x0 + q * cw;
+          if (!v) { doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(rot, xx, y0 + 6.2); return; }
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), xx, y0 + 2.6);
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); cor(TINTA); doc.text(v, xx, y0 + 7.4);
+        });
+        doc.setFont("helvetica", "normal");
+        const w = (lg - GAP * (por - 1)) / por;
+        ct.forEach((c, q) => {
+          const xx = x0 + (q % por) * (w + GAP), yy = y0 + 11 + Math.floor(q / por) * (CH + GAP), PX = 3.5;
+          doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
+          doc.roundedRect(xx, yy, w, CH, 2, 2, "FD");
+          // a unidade e quem comprou, numa linha
+          const uni = String(c.unidade || "").split(" · ").pop() || "—";
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9.4); cor(TINTA); doc.text(uni, xx + PX, yy + 5.6);
+          const uw = doc.getTextWidth(uni);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); cor(CINZA);
+          doc.text(caber(c.comprador || "", w - 2 * PX - uw - 2), xx + PX + uw + 2, yy + 5.6);
+          // o valor do contrato e a barra do que já entrou
+          doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); cor(TINTA); doc.text(moeda(c.total), xx + PX, yy + 12.2);
+          const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0, bw = w - 2 * PX;
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA);
+          doc.text(`${Math.round(f * 100)}% recebido`, xx + w - PX, yy + 12.1, { align: "right" });
+          doc.setFillColor(226, 232, 240); doc.roundedRect(xx + PX, yy + 14, bw, 1.4, 0.7, 0.7, "F");
+          if (f > 0.002) { doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(xx + PX, yy + 14, Math.max(1.4, bw * f), 1.4, 0.7, 0.7, "F"); }
+          // como se paga: o direto (sinal e parcelas) e o financiamento
+          const direto = c.sinal + c.parcelas.soma;
+          const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), moeda(direto)] : null,
+            c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, moeda(c.financiamento)] : null].filter(Boolean);
+          const pw = bw / Math.max(1, comoPaga.length);
+          comoPaga.forEach(([rot, v], z) => {
+            doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA); doc.text(caber(rot, pw - 2), xx + PX + z * pw, yy + 19.6);
+            doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(v, xx + PX + z * pw, yy + 23.4);
+          });
+          doc.setFont("helvetica", "normal");
+        });
+      });
+  }
+  // 9c. a procura: os cadastros do site — números, a curva acumulada e o dia a dia
+  if (pr && pr.serie && pr.serie.length) {
+    const dd = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+    const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    cartao("Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}. Alto potencial em conversão de vendas.`,
+      12 + 40 + 9 + 22 + 6, (x0, y0, lg) => {
+      const st = [["Cadastros", String(pr.total)], ["Últimos 7 dias", String(pr.ultimos7)], ["Últimos 14 dias", String(pr.ultimos14)], ["Melhor dia", `${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`]];
+      const cw = lg / st.length;
+      st.forEach(([rot, v], q) => {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), x0 + q * cw, y0 + 2.6);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(v, x0 + q * cw, y0 + 7.6);
+      });
+      doc.setFont("helvetica", "normal");
+      const sr = pr.serie, n = sr.length, DIR = 10, passo = (lg - DIR) / n;
+      const cx = (i) => x0 + i * passo + passo / 2;
+      // a curva acumulada
+      const t1 = y0 + 14, h1 = 34, b1 = t1 + h1, maxA = Math.max(1, sr[n - 1].acumulado);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.4); cor(TINTA); doc.text("Acumulado", x0, t1 - 1);
+      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b1, x0 + lg - DIR, b1);
+      doc.setDrawColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.setLineWidth(0.6);
+      for (let k = 1; k < n; k++) doc.line(cx(k - 1), b1 - sr[k - 1].acumulado / maxA * (h1 - 4), cx(k), b1 - sr[k].acumulado / maxA * (h1 - 4));
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA);
+      sr.forEach((d, k) => { if (k < n - 1 && sr[k + 1].iso.slice(8) === "01") {
+        const yy = b1 - d.acumulado / maxA * (h1 - 4);
+        doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.circle(cx(k), yy, 0.7, "F"); doc.text(String(d.acumulado), cx(k), yy - 1.6, { align: "center" }); } });
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(String(sr[n - 1].acumulado), cx(n - 1) + 1.5, b1 - (h1 - 4) + 1);
+      // o dia a dia
+      const t2 = b1 + 9, h2 = 20, b2 = t2 + h2, maxD = Math.max(1, ...sr.map((d) => d.n));
+      doc.setFontSize(7.4); doc.text("Por dia", x0, t2 - 1);
+      doc.setFont("helvetica", "normal");
+      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b2, x0 + lg - DIR, b2);
+      doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]);
+      sr.forEach((d, k) => { if (d.n > 0) { const h = Math.max(0.4, d.n / maxD * (h2 - 2)); doc.rect(cx(k) - passo * 0.36, b2 - h, passo * 0.72, h, "F"); } });
+      const im = sr.findIndex((d) => d.iso === pr.melhorDia.iso);
+      doc.setFontSize(6.4); cor(TINTA); doc.text(`${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`, cx(im) + passo, b2 - (h2 - 2) + 2);
+      cor(CINZA);
+      sr.forEach((d, k) => { if (d.iso.slice(8) === "01" || k === 0) doc.text(MES[Number(d.iso.slice(5, 7)) - 1] + "/" + d.iso.slice(2, 4), cx(k), b2 + 3.6); });
+    });
   }
   // 10. pendências
   const pend = pc.notas.filter((n) => n.semArquivo || n.semNumero);
@@ -5856,68 +5856,6 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
           </div>
         )}
-        {ct && ct.length > 0 && (
-          <div style={caixa} data-vk-previa-contratos="1">
-            {titulo(++k, "Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda − desconto + juros + documentação.")}
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 12 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", alignSelf: "center" }}>{ct.length} {ct.length === 1 ? "contrato" : "contratos"}</div>
-              {[["Valor dos contratos", ct.reduce((t, c) => t + c.total, 0), "#111827"], ["Recebido", ct.reduce((t, c) => t + c.recebido, 0), "#111827"],
-                ["A receber", ct.reduce((t, c) => t + c.aReceber, 0), "#111827"]].map(([r, v, cr]) => (
-                <div key={r}>
-                  <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: cr }}>{moeda(v)}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-              {ct.map((c) => {
-                const uni = String(c.unidade || "").split(" · ").pop() || "—";
-                const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0;
-                const direto = c.sinal + c.parcelas.soma;
-                const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), direto] : null,
-                  c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, c.financiamento] : null].filter(Boolean);
-                return (
-                  <div key={c.id} data-vk-contrato={c.id} style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", padding: "12px 14px", minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{uni}</span>
-                      <span style={{ fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.comprador}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginTop: 8 }}>
-                      <span style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>{moeda(c.total)}</span>
-                      <span style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>{Math.round(f * 100)}% recebido</span>
-                    </div>
-                    <div style={{ height: 5, background: "#e5e7eb", borderRadius: 3, marginTop: 4, overflow: "hidden" }}>
-                      <div style={{ width: (f * 100) + "%", height: "100%", background: "#0474f4" }} />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, comoPaga.length)}, minmax(0, 1fr))`, gap: 8, marginTop: 10 }}>
-                      {comoPaga.map(([r, v]) => (
-                        <div key={r} style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>{r}</div>
-                          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#111827" }}>{moeda(v)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {pr && typeof GraficoProcura === "function" && (
-          <div style={caixa} data-vk-previa-procura="1">
-            {titulo(++k, "Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}.`)}
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
-              {[["Cadastros", pr.total], ["Últimos 7 dias", pr.ultimos7], ["Últimos 14 dias", pr.ultimos14], ["Melhor dia", `${pr.melhorDia.n} em ${dia(pr.melhorDia.iso).slice(0, 5)}`]].map(([r2, v]) => (
-                <div key={r2}>
-                  <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r2}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <GraficoProcura resumo={pr} />
-            <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, marginTop: 6 }}>Alto potencial em conversão de vendas.</div>
-          </div>
-        )}
         {fc && (
           <div style={caixa} data-vk-previa-fluxo="1">
             {fc.erro ? titulo(++k, "Fluxo de Caixa Livre", fc.erro + " Volte aos parâmetros para informar.") : <>
@@ -5979,6 +5917,68 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
                 <span style={{ color: "#6b7280" }}> · notas pagas {moeda(cf.totalNotas)}{cf.foraDoPeriodo ? ` · fora do período ${moeda(cf.foraDoPeriodo)}` : ""}{cf.naoPago ? ` · lançado não pago ${moeda(cf.naoPago)}` : ""}{cf.foraDoFF ? ` · fora do custo ${moeda(cf.foraDoFF)}` : ""}</span>
               </div>
             )}
+          </div>
+        )}
+        {ct && ct.length > 0 && (
+          <div style={caixa} data-vk-previa-contratos="1">
+            {titulo(++k, "Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda − desconto + juros + documentação.")}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", alignSelf: "center" }}>{ct.length} {ct.length === 1 ? "contrato" : "contratos"}</div>
+              {[["Valor dos contratos", ct.reduce((t, c) => t + c.total, 0), "#111827"], ["Recebido", ct.reduce((t, c) => t + c.recebido, 0), "#111827"],
+                ["A receber", ct.reduce((t, c) => t + c.aReceber, 0), "#111827"]].map(([r, v, cr]) => (
+                <div key={r}>
+                  <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: cr }}>{moeda(v)}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+              {ct.map((c) => {
+                const uni = String(c.unidade || "").split(" · ").pop() || "—";
+                const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0;
+                const direto = c.sinal + c.parcelas.soma;
+                const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), direto] : null,
+                  c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, c.financiamento] : null].filter(Boolean);
+                return (
+                  <div key={c.id} data-vk-contrato={c.id} style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", padding: "12px 14px", minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{uni}</span>
+                      <span style={{ fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.comprador}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginTop: 8 }}>
+                      <span style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>{moeda(c.total)}</span>
+                      <span style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>{Math.round(f * 100)}% recebido</span>
+                    </div>
+                    <div style={{ height: 5, background: "#e5e7eb", borderRadius: 3, marginTop: 4, overflow: "hidden" }}>
+                      <div style={{ width: (f * 100) + "%", height: "100%", background: "#0474f4" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, comoPaga.length)}, minmax(0, 1fr))`, gap: 8, marginTop: 10 }}>
+                      {comoPaga.map(([r, v]) => (
+                        <div key={r} style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>{r}</div>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#111827" }}>{moeda(v)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {pr && typeof GraficoProcura === "function" && (
+          <div style={caixa} data-vk-previa-procura="1">
+            {titulo(++k, "Cadastros de novos Clientes no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}.`)}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
+              {[["Cadastros", pr.total], ["Últimos 7 dias", pr.ultimos7], ["Últimos 14 dias", pr.ultimos14], ["Melhor dia", `${pr.melhorDia.n} em ${dia(pr.melhorDia.iso).slice(0, 5)}`]].map(([r2, v]) => (
+                <div key={r2}>
+                  <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r2}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <GraficoProcura resumo={pr} />
+            <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, marginTop: 6 }}>Alto potencial em conversão de vendas.</div>
           </div>
         )}
         <div style={{ ...caixa, fontSize: 12.5, color: "#374151" }}>
