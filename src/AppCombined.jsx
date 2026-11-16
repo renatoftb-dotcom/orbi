@@ -41446,6 +41446,56 @@ function cpSomarMensais(lista, campos, extras) {
   const total = campos.reduce((t, c) => { t[c] = red(meses.reduce((a, m) => a + (m[c] || 0), 0)); return t; }, {});
   return { meses, total };
 }
+// Os marcos do recebimento: os meses em que entra um valor grande de um
+// módulo (a liberação do financiamento pela Caixa). Mês com mais de um
+// módulo junta os nomes ("Mód. 2 e 3").
+function cpMarcosDoRecebimento(porModulo, somado) {
+  const totalDoMes = (m) => (Number(m.recebido) || 0) + (Number(m.assinado) || 0) + (Number(m.assinar) || 0) + (Number(m.estimativa) || 0);
+  const maior = Math.max(0, ...((somado && somado.meses) || []).map(totalDoMes));
+  const corte = Math.max(50000, maior * 0.25);
+  const curto = (nome) => { const m = String(nome || "").match(/m[oó]dulo\s*(\S+)/i); return m ? m[1] : String(nome || "").trim(); };
+  const porMes = {};
+  for (const { nome, rm } of porModulo || []) {
+    for (const m of (rm && rm.meses) || []) {
+      if (m.chave === "pre" || totalDoMes(m) < corte) continue;
+      (porMes[m.chave] = porMes[m.chave] || []).push(curto(nome));
+    }
+  }
+  return Object.keys(porMes).sort().map((chave) => {
+    const nomes = porMes[chave].filter(Boolean);
+    const juntos = nomes.length > 1 ? nomes.slice(0, -1).join(", ") + " e " + nomes[nomes.length - 1] : nomes[0] || "";
+    return { chave, rotulo: "Liberação CEF" + (juntos ? " · Mód. " + juntos : "") };
+  });
+}
+// Onde vai o nome de cada marco e em que linha. O nome fica à direita da
+// linha de chamada; perto da borda direita, à esquerda dela. Um nome que
+// passa por cima da linha de chamada de outro marco fica numa linha acima
+// do nome desse outro (a linha de chamada começa no nome e desce até a
+// barra) — assim nenhuma linha cruza um nome. `x` é a linha de chamada,
+// `largura` o tamanho do nome, `limite` a borda direita, `folga` o espaço
+// entre a linha e o nome.
+function cpLinhasDosMarcos(posicoes, limite, folga) {
+  const ps = (posicoes || []).map((p) => {
+    const f = folga == null ? 0 : folga;
+    const direita = limite == null || p.x + f + p.largura <= limite;
+    const inicio = direita ? p.x + f : Math.max(0, p.x - f - p.largura);
+    return { x: p.x, inicio, fim: inicio + p.largura };
+  });
+  const n = ps.length, linha = ps.map(() => 0);
+  const cobre = (a, b) => a !== b && ps[b].x > ps[a].inicio && ps[b].x < ps[a].fim;
+  const encosta = (a, b) => a !== b && ps[a].inicio < ps[b].fim && ps[b].inicio < ps[a].fim;
+  for (let volta = 0; volta < n * 2 + 2; volta++) {
+    let mudou = false;
+    for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+      // o nome de a cobre a linha de b: a fica acima do nome de b
+      if (cobre(a, b) && !cobre(b, a) && linha[b] < linha[a] + 1) { linha[b] = linha[a] + 1; mudou = true; }
+      // dois nomes encostados não ficam na mesma linha
+      else if (encosta(a, b) && a < b && linha[a] === linha[b] && !cobre(b, a)) { linha[b] += 1; mudou = true; }
+    }
+    if (!mudou) break;
+  }
+  return ps.map((p, k) => ({ linha: linha[k], inicio: p.inicio }));
+}
 // A prestação do empreendimento inteiro com as datas de cada módulo: os
 // custos, os recebimentos e o fluxo de caixa de cada um (pré-obra pelo
 // início dele, custo que falta dividido até o término dele), somados mês a mês.
@@ -41475,6 +41525,7 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
   const rmS = cpSomarMensais(rms, ["recebido", "assinado", "assinar", "firme", "estimativa"], extras);
   rmS.total.geral = red(rmS.total.recebido + rmS.total.assinado + rmS.total.assinar + rmS.total.estimativa);
   const rm = { regime: entrada, meses: rmS.meses, total: rmS.total, temCronograma: rms.some((r) => r.temCronograma) };
+  rm.marcos = cpMarcosDoRecebimento(ms.map((m, i) => ({ nome: m.nome || "", rm: rms[i] })), rm);
   // o fluxo: cada módulo até o término dele. Sem término, só passa se não
   // houver custo a distribuir (nada a dividir); senão, pede o término.
   const faltam = [];
@@ -41750,7 +41801,17 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     // muitos meses: o valor vai deitado em cima de todas as barras, com a
     // letra do tamanho que cabe na largura da barra (sem encavalar)
     const vertical = Math.ceil(6.4 / Math.min(14, larg / Math.max(1, n))) > 1;
-    const topoV = 0;
+    // os marcos (liberação da Caixa): reservam duas linhas no topo
+    const temMarcos = !!(o.marcos && o.marcos.length);
+    let posMarcosPdf = [];
+    if (temMarcos) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.2);
+      const sl = Math.min(14, larg / Math.max(1, n));
+      posMarcosPdf = cpLinhasDosMarcos(o.marcos.map((z) => { const k = meses.findIndex((m) => m.chave === z.chave);
+        return { x: x0 + k * sl + sl / 2, largura: 0.6 + doc.getTextWidth(z.rotulo) }; }), x0 + larg, 0.8);
+      doc.setFont("helvetica", "normal");
+    }
+    const topoV = temMarcos ? 2 + (Math.max(0, ...posMarcosPdf.map((pm) => pm.linha)) + 1) * 3.6 : 0;
     const escP = maxPos > 0 ? Math.max(1, hPos - topoV) / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
     void total;
     doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(x0, base, x0 + Math.min(larg, slot * n + 2), base);
@@ -41786,6 +41847,15 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
           while (fs > 3.6 && doc.getTextWidth(curto(v)) > slot - 0.3) { fs -= 0.2; doc.setFontSize(fs); }
           doc.text(curto(v), cx, yy - 1, { align: "center" }); doc.setFont("helvetica", "normal");
         } else if (v > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA); doc.text(curto(v), cx, yy - 1.2, { align: "center" }); doc.setFont("helvetica", "normal"); }
+      }
+      // o marco: uma linha fina saindo do topo da barra até o nome, em cima
+      const mc = temMarcos ? o.marcos.find((z) => z.chave === m.chave) : null;
+      if (mc) {
+        const ordem = o.marcos.indexOf(mc), linha = (posMarcosPdf[ordem] || {}).linha || 0;
+        const yTxt = y0 + 2.6 + linha * 3.6, yBarra = base - Math.max(0, v * escP) - (vertical ? 4.2 : 4.6);
+        doc.setDrawColor(156, 163, 175); doc.setLineWidth(0.15); doc.line(cx, yTxt + 0.9, cx, Math.max(yTxt + 1, yBarra));
+        const ini = posMarcosPdf[ordem] ? posMarcosPdf[ordem].inicio : cx + 0.8;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.2); cor(TINTA); doc.text(mc.rotulo, ini, yTxt); doc.setFont("helvetica", "normal");
       }
       const atual = m.chave === (o.mesHoje || "");
       if (mostra(k, m) && !(pulo > 1 && !atual && meses.some((z, j) => z.chave === (o.mesHoje || "") && j !== k && Math.abs(j - k) < pulo))) {
@@ -41923,7 +41993,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // 4. recebimentos mês a mês
   if (rm && rm.meses.length) {
     cartao("Recebimentos mês a mês", "Contratos realizados e vendas estimadas, baseadas na procura e nos novos cadastros de clientes.", alturaDoGrafico(ALT_BARRAS),
-      (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
+      (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "", marcos: rm.marcos || [] }));
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela([{ t: "Mês", w: 34 }, { t: "Recebido", w: 37, alinhar: "right" }, { t: "Contratos firmes", w: 37, alinhar: "right" },
       { t: "Vendas estimadas", w: 37, alinhar: "right" }, { t: "Total do mês", w: 37, alinhar: "right" }],
@@ -42297,7 +42367,7 @@ function IconePapel({ tamanho, estilo }) {
 // barra em coordenadas do gráfico; animar um <g> com `transform-box: fill-box`
 // não é respeitado por todos os navegadores e a barra ficava parada.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
-function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp }) {
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp, marcos }) {
   // Revelação em cascata, como na calibragem: `reveladas` sobe de uma em uma
   // e cada barra só anima quando chega a sua vez. Recomeça quando a lista de
   // meses muda, para a animação rodar de novo depois de pagar ou filtrar.
@@ -42327,7 +42397,13 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
   const faixasDaVez = todasFaixas.filter((f) => chaves.indexOf(f[0]) >= 0);
   const valorDoMes = (m) => chaves.reduce((a, k) => a + (Number(m[k]) || 0), 0);
   const maior = fluxo.meses.reduce((a, m) => Math.max(a, valorDoMes(m)), 0);
-  const LARG = 40, ESPACO = 16, ALT = 130, BASE = ALT + 16;
+  // os marcos (liberação da Caixa) ganham duas linhas no topo
+  const listaMarcos = (marcos || []).filter((z) => fluxo.meses.some((m) => m.chave === z.chave));
+  const xMarco = (z) => fluxo.meses.findIndex((m) => m.chave === z.chave) * (40 + 16) + 16 / 2 + 40 / 2;
+  const larguraBarras = Math.max(fluxo.meses.length * (40 + 16), 220);
+  const posMarcos = cpLinhasDosMarcos(listaMarcos.map((z) => ({ x: xMarco(z), largura: 4 + z.rotulo.length * 5.7 })), larguraBarras, 6);
+  const TOPO = listaMarcos.length ? 8 + (Math.max(0, ...posMarcos.map((pm) => pm.linha)) + 1) * 15 : 0;
+  const LARG = 40, ESPACO = 16, ALT = 130, BASE = TOPO + ALT + 16;
   const largura = Math.max(fluxo.meses.length * (LARG + ESPACO), 220);
   const altura = (v) => (maior > 0 && v > 0 ? Math.max(3, (v / maior) * ALT) : 0);
   const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
@@ -42349,7 +42425,21 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
            calibragem: as barras crescem da linha de base em qualquer
            máquina. (Ver a nota na spec sobre essa escolha.) */
       `}</style>
-      <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
+      <svg width={largura} height={TOPO + ALT + 46} role="img" style={{ display: "block" }}>
+        {listaMarcos.map((z, q) => {
+          const i = fluxo.meses.findIndex((m) => m.chave === z.chave);
+          const m = fluxo.meses[i];
+          const cx = i * (LARG + ESPACO) + ESPACO / 2 + LARG / 2;
+          const yTxt = 11 + posMarcos[q].linha * 15;
+          const yBarra = BASE - altura(valorDoMes(m)) - 19;
+          return (
+            <g key={"marco" + z.chave} data-vk-marco={z.chave}>
+              <line x1={cx} x2={cx} y1={yTxt + 4} y2={Math.max(yTxt + 5, yBarra)} stroke="#9ca3af" strokeWidth="1" />
+              <circle cx={cx} cy={yTxt + 4} r="2" fill="#9ca3af" />
+              <text x={posMarcos[q].inicio} y={yTxt + 3} fontSize="11" fontWeight="600" fill="#374151">{z.rotulo}</text>
+            </g>
+          );
+        })}
         {fluxo.meses.map((m, i) => {
           const x = i * (LARG + ESPACO) + ESPACO / 2;
           const faixas = faixasDaVez.map(([k, cor]) => ({ k, cor, h: altura(m[k]) })).filter((f) => f.h > 0);
@@ -42674,7 +42764,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {rm && rm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-receb="1">
             {titulo(++k, "Recebimentos mês a mês", "Contratos realizados e vendas estimadas, baseadas na procura e nos novos cadastros de clientes.")}
-            <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} />
+            <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} marcos={rm.marcos || []} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
           </div>
         )}
@@ -42870,7 +42960,7 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
       {rm.meses.length > 0 && (
         <div style={caixa}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Recebimento mês a mês</div>
-          <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={new Date().toISOString().slice(0, 10)} faixas={CP_FAIXAS_RECEB} />
+          <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={new Date().toISOString().slice(0, 10)} faixas={CP_FAIXAS_RECEB} marcos={cpMarcosDoRecebimento([{ nome: "", rm }], rm)} />
           {legenda(CP_FAIXAS_RECEB, rm.meses)}
         </div>
       )}
@@ -43198,7 +43288,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       modulosPC: todos ? resumoPorModulo(listaModulos, { ...opPC, despesa: param.despesa, entrada: param.entrada, datas: datasPorId }) : null,
       nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
       cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
-      rmPC: mens ? mens.rm : obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
+      rmPC: mens ? mens.rm : obraDaPC ? (() => { const r = recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada });
+        return { ...r, marcos: cpMarcosDoRecebimento([{ nome: "", rm: r }], r) }; })() : null,
       fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       ctPC: obraDaPC ? contratosFirmes(obraDaPC) : null,
       // a procura (cadastros do site) do empreendimento

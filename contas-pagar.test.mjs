@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3829,6 +3829,17 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   assert.deepStrictEqual([ctf[0].unidade, ctf[0].liquido, ctf[0].total, ctf[0].recebido, ctf[0].aReceber, ctf[0].sinal, ctf[0].parcelas.n, ctf[0].financiamento, ctf[0].proxima.vencimento, ctf[0].pendente],
     ["Casa 01", 900, 970, 200, 770, 200, 2, 500, "2026-12-10", true]);
   assert.strictEqual(modulo.cpPeriodoDireto(ctf[0]), " (12/2026 a 01/2027)");
+  const rmA = { meses: [{ chave: "2027-04", recebido: 0, assinado: 350000, assinar: 0, estimativa: 0 }, { chave: "2027-05", recebido: 0, assinado: 2000, assinar: 0, estimativa: 0 }] };
+  const rmB = { meses: [{ chave: "2027-04", recebido: 0, assinado: 0, assinar: 0, estimativa: 180000 }, { chave: "2027-09", recebido: 0, assinado: 0, assinar: 0, estimativa: 518000 }] };
+  const som = { meses: [{ chave: "2027-04", estimativa: 530000 }, { chave: "2027-05", assinado: 2000 }, { chave: "2027-09", estimativa: 518000 }] };
+  assert.deepStrictEqual(modulo.cpMarcosDoRecebimento([{ nome: "Jacarezinho Módulo 1", rm: rmA }, { nome: "Jacarezinho Módulo 2", rm: rmB }], som),
+    [{ chave: "2027-04", rotulo: "Liberação CEF · Mód. 1 e 2" }, { chave: "2027-09", rotulo: "Liberação CEF · Mód. 2" }]);
+  assert.deepStrictEqual(modulo.cpMarcosDoRecebimento([{ nome: "", rm: rmA }], rmA), [{ chave: "2027-04", rotulo: "Liberação CEF" }]);
+  // o nome que passa por cima da linha do próximo empurra o próximo para baixo
+  assert.deepStrictEqual(modulo.cpLinhasDosMarcos([{ x: 0, largura: 100 }, { x: 300, largura: 100 }, { x: 350, largura: 100 }, { x: 380, largura: 50 }]).map((z) => z.linha), [0, 0, 1, 2]);
+  // perto da borda: o nome vai para a esquerda da linha; o da direita fica em cima
+  const borda = modulo.cpLinhasDosMarcos([{ x: 500, largura: 120 }, { x: 560, largura: 120 }], 600, 5);
+  assert.deepStrictEqual(borda.map((z) => [z.linha, Math.round(z.inicio)]), [[1, 375], [0, 435]]);
   // A: 900 até jun (3 meses: abr, mai, jun = 300); B: 550 até mai (2 meses: abr, mai = 275)
   const lin = (k) => pm.fc.linhas.find((l) => l.chave === k);
   assert.strictEqual(lin("2026-04").custoARealizar, 575); assert.strictEqual(lin("2026-05").custoARealizar, 575); assert.strictEqual(lin("2026-06").custoARealizar, 300);
