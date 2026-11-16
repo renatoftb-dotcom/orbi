@@ -5110,7 +5110,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       secao("Fluxo de Caixa Livre", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
       cartao("Fluxo de Caixa Livre",
-        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o ${fc.regime === "competencia" ? "lançado, pago ou não" : "pago"}) dividido ${fc.porModulo ? "mês a mês até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término`}. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
+        "Fluxo de caixa livre, demonstrando a dinâmica entre períodos de investimento e de vendas.",
         alturaDoGrafico(38), (x0, y0, lg) => graficoFluxo(fc.linhas, x0, y0, lg, fc.mesHoje));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
@@ -5854,7 +5854,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {fc && (
           <div style={caixa} data-vk-previa-fluxo="1">
             {fc.erro ? titulo(++k, "Fluxo de Caixa Livre", fc.erro + " Volte aos parâmetros para informar.") : <>
-              {titulo(++k, "Fluxo de Caixa Livre", `Custo a realizar: ${moeda(fc.aRealizar)} dividido ${fc.porModulo ? "até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}`}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
+              {titulo(++k, "Fluxo de Caixa Livre", "Fluxo de caixa livre, demonstrando a dinâmica entre períodos de investimento e de vendas.")}
               <GraficoSaldoAcumulado linhas={fc.linhas} mesHoje={fc.mesHoje} />
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
