@@ -41910,8 +41910,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 3. custos mês a mês
   if (cm && cm.meses.length) {
-    cartao(comp ? "Custos realizados mês a mês" : "Custos mês a mês", (comp ? "Competência: cada despesa no mês em que foi contabilizada (a compra no cartão, com todas as parcelas, no mês da compra)." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
-      + (par && par.inicio ? ` O que veio antes de ${dia(par.inicio)} está em Pré-obra.` : ""), alturaDoGrafico(ALT_BARRAS),
+    cartao(comp ? "Custos realizados mês a mês" : "Custos mês a mês", "", alturaDoGrafico(ALT_BARRAS),
       (x0, y0, lg) => barras(cm.meses, comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const cols = [{ t: "Mês", w: 22 }].concat(comp ? [{ t: "Custo realizado", w: 40, alinhar: "right" }]
       : [{ t: "Pago", w: 30, alinhar: "right" }, { t: "Vencido", w: 30, alinhar: "right" }, { t: "A pagar", w: 30, alinhar: "right" }]).concat([{ t: "Total do mês", w: 34, alinhar: "right" }]);
@@ -42667,7 +42666,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {cm && cm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-custos="1">
-            {titulo(++k, comp ? "Custos realizados mês a mês" : "Custos mês a mês", comp ? "Competência: cada despesa no mês em que foi contabilizada (a compra no cartão, com todas as parcelas, no mês da compra)." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")}
+            {titulo(++k, comp ? "Custos realizados mês a mês" : "Custos mês a mês")}
             <GraficoFluxoMensal fluxo={{ meses: cm.meses }} hojeIso={hoje} series={cm.series}
               faixas={comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS} />
             {legenda(comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, cm.meses)}
