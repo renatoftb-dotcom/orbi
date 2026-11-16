@@ -65630,10 +65630,9 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
   const [msg, setMsg] = useState(null); // { erro, texto }
   const [lendo, setLendo] = useState(false);
   const dia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "");
-  const ler = (ev) => {
-    const f = ev.target.files && ev.target.files[0];
-    ev.target.value = "";
-    if (!f) return;
+  const [sobre, setSobre] = useState(false);
+  const lerArquivo = (f) => {
+    if (!f || !podeEditar) return;
     setLendo(true); setMsg(null);
     const fr = new FileReader();
     fr.onload = () => {
@@ -65650,6 +65649,21 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
     fr.onerror = () => { setLendo(false); setMsg({ erro: true, texto: "Não consegui ler o arquivo." }); };
     fr.readAsArrayBuffer(f);
   };
+  const ler = (ev) => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; lerArquivo(f); };
+  // o campo: arrasta o arquivo para dentro ou clica para escolher
+  const campo = podeEditar && (
+    <label data-vk-procura-subir="1"
+      onDragOver={(e) => { e.preventDefault(); if (!sobre) setSobre(true); }} onDragLeave={() => setSobre(false)}
+      onDrop={(e) => { e.preventDefault(); setSobre(false); lerArquivo(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]); }}
+      style={{ display: "block", border: `1.5px dashed ${sobre ? "#0474f4" : "#cbd5e1"}`, borderRadius: 12, background: sobre ? "#f2f7ff" : "#fff",
+        padding: r ? "12px 14px" : "26px 16px", textAlign: "center", cursor: lendo ? "wait" : "pointer" }}>
+      <div style={{ fontSize: r ? 13 : 14, fontWeight: 600, color: "#111827" }}>
+        {lendo ? "Lendo o arquivo…" : r ? "Arraste aqui o CSV novo para atualizar, ou clique para escolher" : "Arraste aqui o CSV de simulações do site, ou clique para escolher"}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>Só a data do cadastro e a situação ficam guardadas.</div>
+      <input type="file" accept=".csv,text/csv" onChange={ler} style={{ display: "none" }} />
+    </label>
+  );
   const caixa = { border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "14px 16px", background: "#fff", minWidth: 0 };
   const num = (rot, v, sub) => (
     <div style={{ ...caixa, padding: "10px 12px" }}>
@@ -65667,12 +65681,6 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
             <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Procura</div>
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{nome ? nome + " · " : ""}cadastros de simulação no site, por dia</div>
           </div>
-          {podeEditar && (
-            <label data-vk-procura-subir="1" style={{ padding: "8px 14px", borderRadius: 10, background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: lendo ? "wait" : "pointer" }}>
-              {lendo ? "Lendo…" : r ? "Atualizar com novo CSV" : "Subir CSV do site"}
-              <input type="file" accept=".csv,text/csv" onChange={ler} style={{ display: "none" }} />
-            </label>
-          )}
         </div>
         <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
           Do arquivo de simulações exportado do site, o VICKE guarda só a data do cadastro e a situação. Nome, telefone e renda não entram.
@@ -65680,7 +65688,8 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
         </div>
         {msg && <div data-vk-procura-msg="1" style={{ fontSize: 12.5, marginTop: 8, color: msg.erro ? "#b91c1c" : "#166534" }}>{msg.texto}</div>}
       </div>
-      {!r && <div style={{ ...caixa, fontSize: 13, color: "#6b7280" }}>Nenhum cadastro ainda. Suba o CSV de simulações do site.</div>}
+      {campo}
+      {!r && !podeEditar && <div style={{ ...caixa, fontSize: 13, color: "#6b7280" }}>Nenhum cadastro ainda.</div>}
       {r && <>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {num("Cadastros", r.total, `de ${dia(r.de)} a ${dia(r.ate)}`)}
