@@ -4688,15 +4688,25 @@ function contratosFirmes(obra, opcoes) {
     const abertas = cs.filter((c) => !c.pago && c.vencimento).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
     const prox = abertas[0] || null;
     const valor = Number(v.valor) || 0, desconto = Number(v.desconto) || 0, juros = Number(v.juros) || 0, doc = Number(v.provisaoDoc) || 0;
+    // o período do que o comprador paga direto (sinal e parcelas): do
+    // primeiro ao último mês
+    const datasDireto = sinal.concat(parc).map((c) => String((c.pago && c.pagoEm) || c.vencimento || c.pagoEm || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)).sort();
     return { id: v.id, unidade: unidade(v.unidadeId), comprador: v.comprador || "", data: String(v.data || "").slice(0, 10),
       valor, desconto, juros, documentacao: doc, liquido: red(valor - desconto),
       total: red(cs.reduce((t, c) => t + val(c), 0)), recebido: red(cs.filter((c) => c.pago).reduce((t, c) => t + val(c), 0)),
       aReceber: red(cs.filter((c) => !c.pago).reduce((t, c) => t + val(c), 0)),
       sinal: red(sinal.reduce((t, c) => t + val(c), 0)), parcelas: { n: parc.length, soma: red(parc.reduce((t, c) => t + val(c), 0)) },
       financiamento: red(fin.reduce((t, c) => t + val(c), 0)), financiamentoEm: fin.length ? String(fin[0].vencimento || "").slice(0, 10) : "",
+      diretoDe: datasDireto[0] || "", diretoAte: datasDireto[datasDireto.length - 1] || "",
       proxima: prox ? { vencimento: String(prox.vencimento).slice(0, 10), valor: val(prox), atrasada: String(prox.vencimento).slice(0, 10) < hoje } : null,
       pendente: !!v.contratoPendente, observacao: String(v.observacao || "").trim() };
   });
+}
+// "(09/2026)" ou "(09/2026 a 05/2028)": o mês do sinal e, com parcelas, até a última
+function cpPeriodoDireto(c) {
+  const f = (m) => (m ? m.slice(5, 7) + "/" + m.slice(0, 4) : "");
+  if (!c || !c.diretoDe) return "";
+  return c.diretoAte && c.diretoAte !== c.diretoDe ? ` (${f(c.diretoDe)} a ${f(c.diretoAte)})` : ` (${f(c.diretoDe)})`;
 }
 // O percentual realizado de cada módulo (realizado ÷ estimado), só para
 // quem tem estimativa; o do empreendimento soma só esses módulos.
@@ -5138,11 +5148,11 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
           if (f > 0.002) { doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(xx + PX, yy + 14, Math.max(1.4, bw * f), 1.4, 0.7, 0.7, "F"); }
           // como se paga: o direto (sinal e parcelas) e o financiamento
           const direto = c.sinal + c.parcelas.soma;
-          const comoPaga = [direto > 0.004 ? [c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal", moeda(direto)] : null,
+          const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), moeda(direto)] : null,
             c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, moeda(c.financiamento)] : null].filter(Boolean);
           const pw = bw / Math.max(1, comoPaga.length);
           comoPaga.forEach(([rot, v], z) => {
-            doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA); doc.text(rot, xx + PX + z * pw, yy + 19.6);
+            doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA); doc.text(caber(rot, pw - 2), xx + PX + z * pw, yy + 19.6);
             doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(v, xx + PX + z * pw, yy + 23.4);
           });
           doc.setFont("helvetica", "normal");
@@ -5864,7 +5874,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
                 const uni = String(c.unidade || "").split(" · ").pop() || "—";
                 const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0;
                 const direto = c.sinal + c.parcelas.soma;
-                const comoPaga = [direto > 0.004 ? [c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal", direto] : null,
+                const comoPaga = [direto > 0.004 ? [(c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal") + cpPeriodoDireto(c), direto] : null,
                   c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, c.financiamento] : null].filter(Boolean);
                 return (
                   <div key={c.id} data-vk-contrato={c.id} style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", padding: "12px 14px", minWidth: 0 }}>
