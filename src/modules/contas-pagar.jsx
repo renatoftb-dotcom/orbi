@@ -5102,19 +5102,20 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // contrato, quanto já entrou (a barra), como se paga e a próxima parcela
   if (ct && ct.length) {
     const soma = (k) => ct.reduce((t, c) => t + (Number(c[k]) || 0), 0);
-    const GAP = 4, CH = 37, por = 2;
+    const GAP = 4, CH = 27, por = 2;
     const linhasDeCartoes = Math.ceil(ct.length / por);
     cartao("Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda - desconto + juros + documentação.",
       11 + linhasDeCartoes * (CH + GAP) - GAP, (x0, y0, lg) => {
         // o resumo: quantos, valor, recebido, a receber
         const resumo = [[`${ct.length} ${ct.length === 1 ? "contrato" : "contratos"}`, ""], ["Valor dos contratos", moeda(soma("total"))],
           ["Recebido", moeda(soma("recebido"))], ["A receber", moeda(soma("aReceber"))]];
+        void resumo;
         const cw = lg / resumo.length;
         resumo.forEach(([rot, v], q) => {
           const xx = x0 + q * cw;
           if (!v) { doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(rot, xx, y0 + 6.2); return; }
           doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), xx, y0 + 2.6);
-          doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); cor(q === 2 ? VERDE : TINTA); doc.text(v, xx, y0 + 7.4);
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); cor(TINTA); doc.text(v, xx, y0 + 7.4);
         });
         doc.setFont("helvetica", "normal");
         const w = (lg - GAP * (por - 1)) / por;
@@ -5122,42 +5123,29 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
           const xx = x0 + (q % por) * (w + GAP), yy = y0 + 11 + Math.floor(q / por) * (CH + GAP), PX = 3.5;
           doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
           doc.roundedRect(xx, yy, w, CH, 2, 2, "FD");
-          const pu = String(c.unidade || "").split(" · "), uni = pu.pop() || "—", mod = pu.join(" · ");
+          // a unidade e quem comprou, numa linha
+          const uni = String(c.unidade || "").split(" · ").pop() || "—";
           doc.setFont("helvetica", "bold"); doc.setFontSize(9.4); cor(TINTA); doc.text(uni, xx + PX, yy + 5.6);
-          // a situação, numa etiqueta
-          const etq = c.pendente ? "Assinatura pendente" : "Contrato assinado";
-          doc.setFontSize(6.4); const ew = doc.getTextWidth(etq) + 3.2;
-          const fundoE = c.pendente ? [254, 243, 199] : [220, 252, 231], tintaE = c.pendente ? [146, 64, 14] : VERDE;
-          doc.setFillColor(fundoE[0], fundoE[1], fundoE[2]); doc.roundedRect(xx + w - PX - ew, yy + 2.6, ew, 4, 1.6, 1.6, "F");
-          cor(tintaE); doc.text(etq, xx + w - PX - ew / 2, yy + 5.3, { align: "center" });
-          doc.setFont("helvetica", "normal"); doc.setFontSize(7); cor(CINZA);
-          doc.text(caber([c.comprador, mod].filter(Boolean).join(" · "), w - 2 * PX), xx + PX, yy + 9.4);
+          const uw = doc.getTextWidth(uni);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); cor(CINZA);
+          doc.text(caber(c.comprador || "", w - 2 * PX - uw - 2), xx + PX + uw + 2, yy + 5.6);
           // o valor do contrato e a barra do que já entrou
-          doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); cor(TINTA); doc.text(moeda(c.total), xx + PX, yy + 15.4);
-          const vw = doc.getTextWidth(moeda(c.total));
-          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text("valor do contrato", xx + PX + vw + 1.8, yy + 15.3);
+          doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); cor(TINTA); doc.text(moeda(c.total), xx + PX, yy + 12.2);
           const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0, bw = w - 2 * PX;
-          doc.setFillColor(226, 232, 240); doc.roundedRect(xx + PX, yy + 17.4, bw, 1.6, 0.8, 0.8, "F");
-          if (f > 0.002) { doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(xx + PX, yy + 17.4, Math.max(1.6, bw * f), 1.6, 0.8, 0.8, "F"); }
-          doc.setFontSize(6.6); cor(CINZA);
-          doc.text(`Recebido ${moeda(c.recebido)} (${Math.round(f * 100)}%)`, xx + PX, yy + 21.6);
-          doc.text(`A receber ${moeda(c.aReceber)}`, xx + w - PX, yy + 21.6, { align: "right" });
-          // como se paga
-          // como se paga: o que o comprador paga direto (sinal e parcelas,
-          // somados) e o financiamento
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA);
+          doc.text(`${Math.round(f * 100)}% recebido`, xx + w - PX, yy + 12.1, { align: "right" });
+          doc.setFillColor(226, 232, 240); doc.roundedRect(xx + PX, yy + 14, bw, 1.4, 0.7, 0.7, "F");
+          if (f > 0.002) { doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(xx + PX, yy + 14, Math.max(1.4, bw * f), 1.4, 0.7, 0.7, "F"); }
+          // como se paga: o direto (sinal e parcelas) e o financiamento
           const direto = c.sinal + c.parcelas.soma;
           const comoPaga = [direto > 0.004 ? [c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal", moeda(direto)] : null,
             c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, moeda(c.financiamento)] : null].filter(Boolean);
           const pw = bw / Math.max(1, comoPaga.length);
           comoPaga.forEach(([rot, v], z) => {
-            doc.setFont("helvetica", "normal"); doc.setFontSize(6.2); cor(CINZA); doc.text(rot, xx + PX + z * pw, yy + 25.6);
-            doc.setFont("helvetica", "bold"); doc.setFontSize(7.6); cor(TINTA); doc.text(v, xx + PX + z * pw, yy + 29.2);
+            doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA); doc.text(rot, xx + PX + z * pw, yy + 19.6);
+            doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(v, xx + PX + z * pw, yy + 23.4);
           });
           doc.setFont("helvetica", "normal");
-          if (c.proxima) {
-            doc.setFontSize(6.4); cor(c.proxima.atrasada ? VERM : CINZA);
-            doc.text(`Próxima parcela: ${dia(c.proxima.vencimento)} · ${moeda(c.proxima.valor)}${c.proxima.atrasada ? " (vencida)" : ""}`, xx + PX, yy + 34);
-          }
         });
       });
   }
@@ -5824,7 +5812,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
             {titulo(++k, "Contratos firmes", "Vendas feitas, com o comprador pagando. Valor do contrato = venda − desconto + juros + documentação.")}
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 12 }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", alignSelf: "center" }}>{ct.length} {ct.length === 1 ? "contrato" : "contratos"}</div>
-              {[["Valor dos contratos", ct.reduce((t, c) => t + c.total, 0), "#111827"], ["Recebido", ct.reduce((t, c) => t + c.recebido, 0), "#166534"],
+              {[["Valor dos contratos", ct.reduce((t, c) => t + c.total, 0), "#111827"], ["Recebido", ct.reduce((t, c) => t + c.recebido, 0), "#111827"],
                 ["A receber", ct.reduce((t, c) => t + c.aReceber, 0), "#111827"]].map(([r, v, cr]) => (
                 <div key={r}>
                   <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r}</div>
@@ -5834,39 +5822,32 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
             </div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
               {ct.map((c) => {
-                const pu = String(c.unidade || "").split(" · "), uni = pu.pop() || "—", mod = pu.join(" · ");
+                const uni = String(c.unidade || "").split(" · ").pop() || "—";
                 const f = c.total > 0 ? Math.max(0, Math.min(1, c.recebido / c.total)) : 0;
                 const direto = c.sinal + c.parcelas.soma;
                 const comoPaga = [direto > 0.004 ? [c.parcelas.n ? `Sinal e ${c.parcelas.n} parcelas` : "Sinal", direto] : null,
                   c.financiamento > 0.004 ? [`Financiamento${c.financiamentoEm ? " (" + dia(c.financiamentoEm).slice(3) + ")" : ""}`, c.financiamento] : null].filter(Boolean);
                 return (
-                  <div key={c.id} data-vk-contrato={c.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc", padding: "12px 14px", minWidth: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{uni}</div>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
-                        background: c.pendente ? "#fef3c7" : "#dcfce7", color: c.pendente ? "#92400e" : "#166534" }}>{c.pendente ? "Assinatura pendente" : "Contrato assinado"}</span>
+                  <div key={c.id} data-vk-contrato={c.id} style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", padding: "12px 14px", minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{uni}</span>
+                      <span style={{ fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.comprador}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[c.comprador, mod].filter(Boolean).join(" · ")}</div>
-                    <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{moeda(c.total)}</span>
-                      <span style={{ fontSize: 11.5, color: "#6b7280" }}>valor do contrato</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginTop: 8 }}>
+                      <span style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>{moeda(c.total)}</span>
+                      <span style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>{Math.round(f * 100)}% recebido</span>
                     </div>
-                    <div style={{ height: 6, background: "#e2e8f0", borderRadius: 3, marginTop: 6, overflow: "hidden" }}>
-                      <div style={{ width: (f * 100) + "%", height: "100%", background: "#0474f4", borderRadius: 3 }} />
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: "#6b7280", marginTop: 4, flexWrap: "wrap" }}>
-                      <span>Recebido {moeda(c.recebido)} ({Math.round(f * 100)}%)</span><span>A receber {moeda(c.aReceber)}</span>
+                    <div style={{ height: 5, background: "#e5e7eb", borderRadius: 3, marginTop: 4, overflow: "hidden" }}>
+                      <div style={{ width: (f * 100) + "%", height: "100%", background: "#0474f4" }} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, comoPaga.length)}, minmax(0, 1fr))`, gap: 8, marginTop: 10 }}>
                       {comoPaga.map(([r, v]) => (
                         <div key={r} style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 11, color: "#6b7280" }}>{r}</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{moeda(v)}</div>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#111827" }}>{moeda(v)}</div>
                         </div>
                       ))}
                     </div>
-                    {c.proxima && <div style={{ fontSize: 11.5, color: c.proxima.atrasada ? "#b91c1c" : "#6b7280", marginTop: 8 }}>
-                      Próxima parcela: {dia(c.proxima.vencimento)} · {moeda(c.proxima.valor)}{c.proxima.atrasada ? " (vencida)" : ""}</div>}
                   </div>
                 );
               })}
