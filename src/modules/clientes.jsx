@@ -7075,7 +7075,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             },
             // o papel entra em todas as contas da mesma referência e, se a
             // transação já tem número, ganha o nome dele (4219.pdf)
-            anexar: (c, arquivo) => mexerNoPapel(c, "anexar", null, arquivo, undefined, "comprovante") } : null}
+            anexar: (c, arquivo) => mexerNoPapel(c, "anexar", null, arquivo, undefined, "comprovante"),
+            // troca o papel da linha por outro (o antigo sai de todas as contas
+            // da transação); pede confirmação antes
+            trocar: async (c, antigo, arquivo) => {
+              const ok = await dialogo.confirmar({ titulo: "Trocar o papel?", mensagem: `Sai ${(antigo && antigo.nome) || "o papel atual"} e entra ${arquivo.name}, em todas as linhas desta transação.`, confirmar: "Trocar" });
+              if (ok) mexerNoPapel(c, "trocar", antigo, arquivo);
+            } } : null}
           completar={perm.podeGerenciarObra ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : "", obraId: obraAtual.id } : null} />
         {janelaDaConta()}
       </div>

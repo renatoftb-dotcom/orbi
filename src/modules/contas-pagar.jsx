@@ -6729,8 +6729,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
     .filter((c) => ocultas.indexOf(c.titulo) < 0);
   const comAcoes = !!(acoes && (acoes.editar || acoes.excluir || acoes.verPapel || acoes.anexar));
-  const grade = COLS.map((c) => c.px + "px").join(" ") + (comAcoes ? " 132px" : "");
-  const largura = COLS.reduce((t, c) => t + c.px, 0) + (comAcoes ? 142 : 0) + COLS.length * 10 + 24;
+  const larguraAcoes = acoes && acoes.trocar ? 178 : 132;
+  const grade = COLS.map((c) => c.px + "px").join(" ") + (comAcoes ? " " + larguraAcoes + "px" : "");
+  const largura = COLS.reduce((t, c) => t + c.px, 0) + (comAcoes ? larguraAcoes + 10 : 0) + COLS.length * 10 + 24;
   // Os títulos da linha ficam presos à esquerda ao rolar para o lado, como
   // o "congelar painéis" do Excel: a referência e, no escritório, o cliente.
   // Cada coluna presa cobre também o respiro à esquerda dela (o padding da
@@ -6771,6 +6772,15 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             <IconePapel estilo={{ marginRight: 4 }} />
             {papeis[0].nome || "papel"}{papeis.length > 1 ? ` +${papeis.length - 1}` : ""}
           </a>
+        )}
+        {/* trocar o papel (chegou a nota do fornecedor, o comprovante certo…):
+            o novo entra no lugar do antigo em todas as contas da transação */}
+        {acoes.trocar && papeis.length > 0 && (
+          <label style={{ ...b, display: "inline-block" }} data-vk-trocar-papel="1" title={"Trocar " + (papeis[0].nome || "o papel") + " por outro arquivo"}>
+            Trocar
+            <input type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) acoes.trocar(lanc, papeis[0], f); }} />
+          </label>
         )}
         {acoes.anexar && papeis.length === 0 && (
           <label style={{ ...b, display: "inline-block" }} title="Anexar o comprovante ou a nota desta transação">
