@@ -19,13 +19,27 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, planoDaProjecao, obraComProjecao, obraComNotaDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
+    planoDaVenda, planoDaProjecao, obraComProjecao, obraComNotaDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao, procuraDoCsv, procuraResumo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
 const soma = (l) => Math.round(l.reduce((t, x) => t + x.valor, 0) * 100) / 100;
 let n = 0;
 const novoId = () => "id" + (++n);
+
+teste("procura: o CSV do site vira contagem por dia e situação, sem nome nem telefone", () => {
+  const csv = "Status;Cliente;Telefone;A parcelar;Cadastro\nNova;Fulano;(43) 9;;15/11/2026\nEnviada;Beltrano;(43) 9;10;13/11/2026\nenviada;X;;;13/11/2026\nContratada;Y;;;10/11/2026\n;Z;;;\n";
+  const p = M.procuraDoCsv(csv);
+  assert.ok(!p.erro, p.erro);
+  assert.strictEqual(p.total, 4); assert.strictEqual(p.de, "2026-11-10"); assert.strictEqual(p.ate, "2026-11-15");
+  assert.deepStrictEqual(p.dias["2026-11-13"], { Enviada: 2 });
+  assert.ok(!JSON.stringify(p).includes("Fulano") && !JSON.stringify(p).includes("(43)"));
+  const r = M.procuraResumo(p);
+  assert.strictEqual(r.serie.length, 6); assert.strictEqual(r.serie[r.serie.length - 1].acumulado, 4);
+  assert.deepStrictEqual(r.porStatus.map((x) => [x.status, x.n]), [["Nova", 1], ["Enviada", 2], ["Contratada", 1]]);
+  assert.deepStrictEqual([r.melhorDia.iso, r.melhorDia.n, r.ultimos7], ["2026-11-13", 2, 4]);
+  assert.ok(M.procuraDoCsv("a;b\n1;2").erro);
+});
 
 teste("parcelas: entrada + 3 mensais somam o total; dia 31 vira o último dia do mês curto", () => {
   const r = M.crGerarParcelas({ valorTotal: "100.000,00", entrada: "20.000", dataEntrada: "2026-10-31", nParcelas: "3", primeiroVencimento: "2027-01-31" });

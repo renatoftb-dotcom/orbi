@@ -5016,7 +5016,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       doc.setFontSize(7.4); cor(TINTA); doc.text(t, lx + 4.2, ly - 0.2); lx += 4.2 + doc.getTextWidth(t) + 6;
     }
   };
-  const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa, ct = i.contratos;
+  const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa, ct = i.contratos, pr = i.procura;
   const comp = ff && ff.regime === "competencia";
   // 1. resumo
   const caixas = ff ? [["Custo estimado", moeda(ff.total.estimado)], [comp ? "Custo realizado" : "Custo pago", moeda(ff.total.realizado)]]
@@ -5148,6 +5148,45 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
           doc.setFont("helvetica", "normal");
         });
       });
+  }
+  // 4c. a procura: os cadastros do site — números, a curva acumulada e o dia a dia
+  if (pr && pr.serie && pr.serie.length) {
+    const dd = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+    const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    cartao("Procura — cadastros no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}. `
+      + pr.porStatus.map((x) => `${x.status}: ${x.n}`).join(" · ") + ".", 12 + 40 + 9 + 22 + 6, (x0, y0, lg) => {
+      const st = [["Cadastros", String(pr.total)], ["Últimos 7 dias", String(pr.ultimos7)], ["Últimos 14 dias", String(pr.ultimos14)], ["Melhor dia", `${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`]];
+      const cw = lg / st.length;
+      st.forEach(([rot, v], q) => {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), x0 + q * cw, y0 + 2.6);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10); cor(TINTA); doc.text(v, x0 + q * cw, y0 + 7.6);
+      });
+      doc.setFont("helvetica", "normal");
+      const sr = pr.serie, n = sr.length, DIR = 10, passo = (lg - DIR) / n;
+      const cx = (i) => x0 + i * passo + passo / 2;
+      // a curva acumulada
+      const t1 = y0 + 14, h1 = 34, b1 = t1 + h1, maxA = Math.max(1, sr[n - 1].acumulado);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.4); cor(TINTA); doc.text("Acumulado", x0, t1 - 1);
+      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b1, x0 + lg - DIR, b1);
+      doc.setDrawColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.setLineWidth(0.6);
+      for (let k = 1; k < n; k++) doc.line(cx(k - 1), b1 - sr[k - 1].acumulado / maxA * (h1 - 4), cx(k), b1 - sr[k].acumulado / maxA * (h1 - 4));
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.4); cor(CINZA);
+      sr.forEach((d, k) => { if (k < n - 1 && sr[k + 1].iso.slice(8) === "01") {
+        const yy = b1 - d.acumulado / maxA * (h1 - 4);
+        doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.circle(cx(k), yy, 0.7, "F"); doc.text(String(d.acumulado), cx(k), yy - 1.6, { align: "center" }); } });
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); cor(TINTA); doc.text(String(sr[n - 1].acumulado), cx(n - 1) + 1.5, b1 - (h1 - 4) + 1);
+      // o dia a dia
+      const t2 = b1 + 9, h2 = 20, b2 = t2 + h2, maxD = Math.max(1, ...sr.map((d) => d.n));
+      doc.setFontSize(7.4); doc.text("Por dia", x0, t2 - 1);
+      doc.setFont("helvetica", "normal");
+      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(x0, b2, x0 + lg - DIR, b2);
+      doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]);
+      sr.forEach((d, k) => { if (d.n > 0) { const h = Math.max(0.4, d.n / maxD * (h2 - 2)); doc.rect(cx(k) - passo * 0.36, b2 - h, passo * 0.72, h, "F"); } });
+      const im = sr.findIndex((d) => d.iso === pr.melhorDia.iso);
+      doc.setFontSize(6.4); cor(TINTA); doc.text(`${pr.melhorDia.n} em ${dd(pr.melhorDia.iso)}`, cx(im) + passo, b2 - (h2 - 2) + 2);
+      cor(CINZA);
+      sr.forEach((d, k) => { if (d.iso.slice(8) === "01" || k === 0) doc.text(MES[Number(d.iso.slice(5, 7)) - 1] + "/" + d.iso.slice(2, 4), cx(k), b2 + 3.6); });
+    });
   }
   // 5. fluxo de caixa
   if (fc) {
@@ -5701,7 +5740,7 @@ function AnelRealizado({ pct, tam }) {
 }
 function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
   const p = previa.param || {};
-  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods, ctPC: ct } = previa.dados || {};
+  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods, ctPC: ct, prPC: pr } = previa.dados || {};
   const comp = ff && ff.regime === "competencia";
   const moeda = (v) => (v < -0.004 ? "-R$ " : "R$ ") + Math.abs(Number(v || 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dia = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : "—"; };
@@ -5852,6 +5891,21 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
                 );
               })}
             </div>
+          </div>
+        )}
+        {pr && typeof GraficoProcura === "function" && (
+          <div style={caixa} data-vk-previa-procura="1">
+            {titulo(++k, "Procura — cadastros no site", `Simulações feitas no site, por data de cadastro, de ${dia(pr.de)} a ${dia(pr.ate)}.`)}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
+              {[["Cadastros", pr.total], ["Últimos 7 dias", pr.ultimos7], ["Últimos 14 dias", pr.ultimos14], ["Melhor dia", `${pr.melhorDia.n} em ${dia(pr.melhorDia.iso).slice(0, 5)}`]].map(([r2, v]) => (
+                <div key={r2}>
+                  <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{r2}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <GraficoProcura resumo={pr} />
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>{pr.porStatus.map((x) => `${x.status}: ${x.n}`).join(" · ")}</div>
           </div>
         )}
         {fc && (
@@ -6053,7 +6107,7 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento, aoGuardarDatas }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento, aoGuardarDatas, procura }) {
   // no escritório a linha é a transação, com as colunas da planilha do escritório
   const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
   const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
@@ -6314,10 +6368,12 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       rmPC: mens ? mens.rm : obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
       fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null,
-      ctPC: obraDaPC ? contratosFirmes(obraDaPC) : null };
+      ctPC: obraDaPC ? contratosFirmes(obraDaPC) : null,
+      // a procura (cadastros do site) do empreendimento
+      prPC: procura && typeof procuraResumo === "function" ? procuraResumo(procura) : null };
   }
   async function baixarPrestacao(param, opcoesPC) {
-    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC, ctPC } = dadosDaPrestacao(param);
+    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC, ctPC, prPC } = dadosDaPrestacao(param);
     if (!pc.notas.length && !obraDaPC) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
     const obraNome = nomePC || (obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras"));
@@ -6339,7 +6395,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
       const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
       return pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
-        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null, modulos: modulosPC, contratos: ctPC }).output("blob");
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null, modulos: modulosPC, contratos: ctPC, procura: prPC }).output("blob");
     };
     // só o PDF: sem planilha e sem baixar os comprovantes (é rápido)
     if (opcoesPC && opcoesPC.soPdf) {

@@ -665,6 +665,72 @@ function resultadoDoEmpreendimento(obra, ctx) {
   };
 }
 
+// ── Procura: os cadastros do site (as simulações) ──────────────
+// Do CSV exportado do site fica só a contagem: quantos se cadastraram em cada
+// dia e em que situação estão (nova, enviada, contratada…). Nome, telefone e
+// renda não entram no VICKE.
+const PROCURA_ORDEM = ["Nova", "Simulada", "Enviada", "Proposta gerada", "Contratada", "Não qualificado"];
+function procuraSemAcento(t) { return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+function procuraDoCsv(texto) {
+  const linhas = String(texto || "").replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+  if (linhas.length < 2) return { erro: "O arquivo está vazio." };
+  const sep = (linhas[0].match(/;/g) || []).length >= (linhas[0].match(/,/g) || []).length ? ";" : ",";
+  const cortar = (l) => l.split(sep).map((x) => x.replace(/^"|"$/g, "").trim());
+  const cab = cortar(linhas[0]).map(procuraSemAcento);
+  const iS = cab.indexOf("status"), iD = cab.indexOf("cadastro");
+  if (iS < 0 || iD < 0) return { erro: "Não achei as colunas Status e Cadastro. Use o arquivo de simulações exportado do site." };
+  const dias = {};
+  let total = 0, ignoradas = 0;
+  for (const l of linhas.slice(1)) {
+    const c = cortar(l);
+    const m = String(c[iD] || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) { ignoradas += 1; continue; }
+    const iso = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    const bruto = String(c[iS] || "").trim() || "Nova";
+    const status = PROCURA_ORDEM.find((x) => procuraSemAcento(x) === procuraSemAcento(bruto)) || bruto;
+    const d = dias[iso] || (dias[iso] = {});
+    d[status] = (d[status] || 0) + 1;
+    total += 1;
+  }
+  if (!total) return { erro: "Nenhum cadastro com data no arquivo." };
+  const chaves = Object.keys(dias).sort();
+  return { dias, total, de: chaves[0], ate: chaves[chaves.length - 1], ignoradas };
+}
+// O resumo: o dia a dia (com os dias sem cadastro, para a curva), o
+// acumulado, o mês, a situação e os números de destaque.
+function procuraResumo(procura) {
+  const p = procura || {};
+  const dias = p.dias || {};
+  const chaves = Object.keys(dias).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+  if (!chaves.length) return null;
+  const somaDia = (k) => Object.values(dias[k] || {}).reduce((t, n) => t + (Number(n) || 0), 0);
+  const serie = [];
+  let acum = 0;
+  for (let t = new Date(chaves[0] + "T12:00:00Z"), fim = new Date(chaves[chaves.length - 1] + "T12:00:00Z"); t <= fim; t = new Date(t.getTime() + 86400000)) {
+    const iso = t.toISOString().slice(0, 10), n = somaDia(iso);
+    acum += n;
+    serie.push({ iso, n, acumulado: acum });
+  }
+  const porStatus = {};
+  for (const k of chaves) for (const [st, n] of Object.entries(dias[k] || {})) porStatus[st] = (porStatus[st] || 0) + (Number(n) || 0);
+  const ordem = Object.keys(porStatus).sort((a, b) => {
+    const ia = PROCURA_ORDEM.indexOf(a), ib = PROCURA_ORDEM.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  const meses = [];
+  for (const d of serie) {
+    const m = d.iso.slice(0, 7);
+    const ult = meses[meses.length - 1];
+    if (!ult || ult.mes !== m) meses.push({ mes: m, n: d.n, acumulado: d.acumulado });
+    else { ult.n += d.n; ult.acumulado = d.acumulado; }
+  }
+  const melhor = serie.reduce((b, d) => (d.n > b.n ? d : b), serie[0]);
+  const ultimos = (q) => serie.slice(-q).reduce((t, d) => t + d.n, 0);
+  return { total: acum, de: serie[0].iso, ate: serie[serie.length - 1].iso, serie, meses,
+    porStatus: ordem.map((st) => ({ status: st, n: porStatus[st] })), melhorDia: melhor, ultimos7: ultimos(7), ultimos14: ultimos(14),
+    enviadoEm: p.enviadoEm || "", arquivo: p.arquivo || "" };
+}
+
 // ── A receber: fim da parte pura ───────────────────────────────
 
 const CR_ORIGENS = [
@@ -944,6 +1010,149 @@ function NovaContaAReceber({ data, f, setF, aoSalvar, estreito }) {
 // As unidades com o preço estimado; a venda de cada uma (sinal, parcelas,
 // financiamento do banco) e o que falta receber. Receber aqui é dar baixa
 // na conta da obra — a ponte leva para o escritório.
+// ── UI — a procura do empreendimento (cadastros do site) ─────────
+const PROCURA_MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+// Os dois gráficos, na mesma linha do tempo: em cima o acumulado (a curva),
+// embaixo os cadastros de cada dia.
+function GraficoProcura({ resumo }) {
+  const r = resumo;
+  const caixaRef = useRef(null);
+  const nSerie = r && r.serie ? r.serie.length : 0;
+  // no celular o gráfico rola para o lado: abre no fim (os dias mais recentes)
+  useEffect(() => { const el = caixaRef.current; if (el) el.scrollLeft = el.scrollWidth; }, [nSerie]);
+  if (!r || !r.serie || !r.serie.length) return null;
+  const s = r.serie, n = s.length;
+  const ESQ = 34, DIR = 56, PASSO = Math.max(6, Math.min(16, 900 / n)), W = ESQ + n * PASSO + DIR;
+  const H1 = 150, H2 = 80, TOPO = 22, VAO = 34, BASE1 = TOPO + H1, TOPO2 = BASE1 + VAO, BASE2 = TOPO2 + H2, H = BASE2 + 24;
+  const maxA = Math.max(1, s[n - 1].acumulado), maxD = Math.max(1, ...s.map((d) => d.n));
+  const x = (i) => ESQ + i * PASSO + PASSO / 2;
+  const yA = (v) => BASE1 - v / maxA * H1, yD = (v) => v / maxD * H2;
+  const linha = s.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yA(d.acumulado).toFixed(1)}`).join(" ");
+  const area = `${linha} L${x(n - 1).toFixed(1)},${BASE1} L${x(0).toFixed(1)},${BASE1} Z`;
+  const inicioMes = s.map((d, i) => (d.iso.slice(8) === "01" || i === 0 ? i : -1)).filter((i) => i >= 0);
+  const fimMes = s.map((d, i) => (i < n - 1 && s[i + 1].iso.slice(8) === "01" ? i : -1)).filter((i) => i >= 0);
+  const dia = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+  const AZ = "#2563eb";
+  return (
+    <div ref={caixaRef} style={{ overflowX: "auto" }} data-vk-grafico-procura="1">
+      <svg width={W} height={H} role="img" aria-label={`Cadastros: ${r.total} no total`} style={{ display: "block" }}>
+        <text x={ESQ} y={12} fontSize="12" fontWeight="700" fill="#111827">Acumulado</text>
+        {[0.5, 1].map((f) => <line key={f} x1={ESQ} x2={W - DIR} y1={BASE1 - f * H1} y2={BASE1 - f * H1} stroke="#eef0f3" />)}
+        <line x1={ESQ} x2={W - DIR} y1={BASE1} y2={BASE1} stroke="#d1d5db" />
+        <path d={area} fill={AZ} opacity="0.08" />
+        <path d={linha} fill="none" stroke={AZ} strokeWidth="2" strokeLinejoin="round" />
+        {fimMes.map((i) => (
+          <g key={"f" + i}>
+            <circle cx={x(i)} cy={yA(s[i].acumulado)} r="3.5" fill={AZ} stroke="#fff" strokeWidth="1.5" />
+            <text x={x(i)} y={yA(s[i].acumulado) - 8} fontSize="10.5" textAnchor="middle" fill="#6b7280">{s[i].acumulado}</text>
+          </g>
+        ))}
+        <text x={x(n - 1) + 6} y={yA(s[n - 1].acumulado) + 4} fontSize="12" fontWeight="700" fill="#111827">{s[n - 1].acumulado}</text>
+        <text x={ESQ} y={TOPO2 - 8} fontSize="12" fontWeight="700" fill="#111827">Por dia</text>
+        <line x1={ESQ} x2={W - DIR} y1={BASE2} y2={BASE2} stroke="#d1d5db" />
+        {s.map((d, i) => d.n > 0 && (
+          <rect key={d.iso} x={x(i) - PASSO * 0.36} y={BASE2 - yD(d.n)} width={PASSO * 0.72} height={yD(d.n)} rx="1.5" fill={AZ}>
+            <title>{`${dia(d.iso)}: ${d.n} ${d.n === 1 ? "cadastro" : "cadastros"} · acumulado ${d.acumulado}`}</title>
+          </rect>
+        ))}
+        {r.melhorDia && r.melhorDia.n > 0 && (() => { const i = s.findIndex((d) => d.iso === r.melhorDia.iso);
+          return <text x={x(i) + PASSO * 0.6} y={BASE2 - yD(r.melhorDia.n) + 9} fontSize="10.5" fill="#111827">{`${r.melhorDia.n} em ${dia(r.melhorDia.iso)}`}</text>; })()}
+        {inicioMes.map((i) => (
+          <text key={"m" + i} x={x(i)} y={BASE2 + 16} fontSize="10.5" fill="#6b7280">{PROCURA_MESES[Number(s[i].iso.slice(5, 7)) - 1] + "/" + s[i].iso.slice(2, 4)}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+// A tela: sobe o CSV de simulações do site; o VICKE guarda só a contagem.
+function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVoltar, nome }) {
+  const r = typeof procuraResumo === "function" ? procuraResumo(procura) : null;
+  const [msg, setMsg] = useState(null); // { erro, texto }
+  const [lendo, setLendo] = useState(false);
+  const dia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "");
+  const ler = (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    setLendo(true); setMsg(null);
+    const fr = new FileReader();
+    fr.onload = () => {
+      let texto = new TextDecoder("utf-8").decode(fr.result);
+      // planilha salva no Excel vem em Windows-1252: sem isso, os acentos quebram
+      if (texto.indexOf("\uFFFD") >= 0) { try { texto = new TextDecoder("windows-1252").decode(fr.result); } catch (e) { /* fica o utf-8 */ } }
+      const p = procuraDoCsv(texto);
+      setLendo(false);
+      if (p.erro) { setMsg({ erro: true, texto: p.erro }); return; }
+      const nova = { dias: p.dias, total: p.total, de: p.de, ate: p.ate, arquivo: f.name, enviadoEm: new Date().toISOString() };
+      Promise.resolve(aoGravar(nova)).then(() => setMsg({ texto: `${p.total} cadastros de ${dia(p.de)} a ${dia(p.ate)} — atualizado.` }))
+        .catch(() => setMsg({ erro: true, texto: "Não consegui gravar. Tente de novo." }));
+    };
+    fr.onerror = () => { setLendo(false); setMsg({ erro: true, texto: "Não consegui ler o arquivo." }); };
+    fr.readAsArrayBuffer(f);
+  };
+  const caixa = { border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "14px 16px", background: "#fff", minWidth: 0 };
+  const num = (rot, v, sub) => (
+    <div style={{ ...caixa, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>{rot}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{v}</div>
+      {sub && <div style={{ fontSize: 11.5, color: "#6b7280" }}>{sub}</div>}
+    </div>
+  );
+  return (
+    <div data-vk-procura="1" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
+      <div>
+        {aoVoltar && <button type="button" onClick={aoVoltar} style={{ border: "none", background: "transparent", color: "#4b5563", fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 10, fontFamily: "inherit" }}>← Voltar</button>}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Procura</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{nome ? nome + " · " : ""}cadastros de simulação no site, por dia</div>
+          </div>
+          {podeEditar && (
+            <label data-vk-procura-subir="1" style={{ padding: "8px 14px", borderRadius: 10, background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: lendo ? "wait" : "pointer" }}>
+              {lendo ? "Lendo…" : r ? "Atualizar com novo CSV" : "Subir CSV do site"}
+              <input type="file" accept=".csv,text/csv" onChange={ler} style={{ display: "none" }} />
+            </label>
+          )}
+        </div>
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
+          Do arquivo de simulações exportado do site, o VICKE guarda só a data do cadastro e a situação. Nome, telefone e renda não entram.
+          {r && r.enviadoEm ? ` Último arquivo: ${r.arquivo || "CSV"}, enviado em ${dia(r.enviadoEm.slice(0, 10))}.` : ""}
+        </div>
+        {msg && <div data-vk-procura-msg="1" style={{ fontSize: 12.5, marginTop: 8, color: msg.erro ? "#b91c1c" : "#166534" }}>{msg.texto}</div>}
+      </div>
+      {!r && <div style={{ ...caixa, fontSize: 13, color: "#6b7280" }}>Nenhum cadastro ainda. Suba o CSV de simulações do site.</div>}
+      {r && <>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+          {num("Cadastros", r.total, `de ${dia(r.de)} a ${dia(r.ate)}`)}
+          {num("Últimos 7 dias", r.ultimos7)}
+          {num("Últimos 14 dias", r.ultimos14)}
+          {num("Melhor dia", r.melhorDia.n, dia(r.melhorDia.iso))}
+        </div>
+        <div style={caixa}><GraficoProcura resumo={r} /></div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)", gap: 14 }}>
+          <div style={caixa}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Por mês</div>
+            {r.meses.map((m) => (
+              <div key={m.mes} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <span>{PROCURA_MESES[Number(m.mes.slice(5, 7)) - 1]}/{m.mes.slice(2, 4)}</span>
+                <span><b>{m.n}</b> <span style={{ color: "#6b7280" }}>· acumulado {m.acumulado}</span></span>
+              </div>
+            ))}
+          </div>
+          <div style={caixa}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Situação</div>
+            {r.porStatus.map((x) => (
+              <div key={x.status} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <span>{x.status}</span><b>{x.n}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+}
+
 function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias, reservadoNoEscritorio }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const hoje = crHoje();

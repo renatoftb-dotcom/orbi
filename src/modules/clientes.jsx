@@ -7048,6 +7048,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
+          procura={ehEmpDoPainel && cliente ? cliente.procura || null : null}
           aoGuardarDatas={perm.podeGerenciarObra ? (porObra, inicioEmp) => gravarObrasFrescas((minhas) => {
             // só grava se alguma data mudou (início e término de cada obra; o
             // início do empreendimento fica em todos os módulos)
@@ -7090,6 +7091,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <ResultadoDoEmpreendimento obra={obraAtual} isMobile={isMobile} aoVoltar={() => setView("detalheObra")}
           plano={typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []}
           estimativaPorConta={typeof estimativaPorConta === "function" ? estimativaPorConta(obraAtual.estimativaPL || []) : {}} />
+      </div>
+    );
+  }
+
+  // a procura do empreendimento (os cadastros do site): fica no cadastro do
+  // empreendimento, a mesma para todos os módulos
+  if (view === "procuraObra" && obraSelecionada && typeof ProcuraDoEmpreendimento === "function") {
+    return (
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <ProcuraDoEmpreendimento procura={cliente && cliente.procura} podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile}
+          nome={(cliente && cliente.nome) || ""} aoVoltar={() => setView("detalheObra")}
+          aoGravar={(nova) => save((atual) => ({ ...atual, clientes: (atual.clientes || []).map((c) => (c && c.id === cliente.id ? { ...c, procura: nova } : c)) }))} />
       </div>
     );
   }
@@ -7163,6 +7176,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 {(() => { const r = typeof resumoDasVendas === "function" ? resumoDasVendas(obraAtual) : null;
                   if (!r || !r.unidades) return "Unidades e contas a receber";
                   return `${r.vendidas} de ${r.unidades} vendidas` + (r.aReceber > 0 ? ` · ${fmtMoedaCtr(r.aReceber)} a receber` : ""); })()}
+              </div>
+            </button>
+          )}
+          {typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente) && typeof ProcuraDoEmpreendimento === "function" && (
+            <button data-vk-abrir-procura="1" onClick={() => setView("procuraObra")}
+              style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Procura</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
+                {(() => { const r = typeof procuraResumo === "function" ? procuraResumo(cliente && cliente.procura) : null;
+                  return r ? `${r.total} cadastros no site · ${r.ultimos7} nos últimos 7 dias` : "Cadastros do site · subir CSV"; })()}
               </div>
             </button>
           )}
