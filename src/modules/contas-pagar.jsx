@@ -4790,7 +4790,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.setFontSize(7.6); cor(TINTA);
     const reg = (r) => (r === "competencia" ? "competência" : "caixa");
     const itens = [`Despesas: regime de ${reg(par.despesa)}`, `Entradas: regime de ${reg(par.entrada)}`,
-      ...(par.datasModulos ? [par.inicio ? `Início do empreendimento: ${dia(par.inicio)}` : "", "Datas de cada módulo: no quadro Por módulo"]
+      ...(par.datasModulos ? [par.inicio ? `Início do empreendimento: ${dia(par.inicio)}` : ""]
         : [par.inicio ? `Início da obra: ${dia(par.inicio)}` : "", par.termino ? `Término estimado: ${dia(par.termino)}` : ""])].filter(Boolean);
     doc.text(caber(itens.join("     ·     "), LARG - 6), M + 3, y + 4.6);
     y += 11;
@@ -5052,8 +5052,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const mods = i.modulos;
   if (mods && mods.length) {
     const datasTxt = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · ");
-    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. % realizado = custo realizado ÷ estimado (só módulos com estimativa). Vendas estimadas = recebidas + a receber."
-      + (datasTxt ? " Datas da obra — " + datasTxt + "." : ""));
+    void datasTxt;
+    secao("Por módulo");
     const ks = CP_COLUNAS_POR_MODULO.map((c) => c[0]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     // % realizado (realizado ÷ estimado), com o anel, só para o módulo com estimativa
@@ -5066,9 +5066,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 2. físico-financeiro
   if (ff) {
-    secao("Físico-financeiro (obra inteira)", comp
-      ? "Regime de competência: realizado é tudo o que foi lançado na obra, pago ou não. Só o custo de executar (sem venda, terreno e IR). Saldo = estimado - realizado."
-      : "Regime de caixa: realizado é o que já foi pago; o que foi lançado e ainda não foi pago está em A pagar. Só o custo de executar (sem venda, terreno e IR). Saldo = estimado - realizado - a pagar.");
+    secao("Físico-financeiro (obra inteira)");
     const cols = [{ t: "Conta contábil", w: 70 }, { t: "Estimado", w: 28, alinhar: "right" }, { t: comp ? "Realizado (lançado)" : "Realizado (pago)", w: 30, alinhar: "right" }]
       .concat(comp ? [] : [{ t: "A pagar", w: 28, alinhar: "right" }]).concat([{ t: "Saldo", w: 28, alinhar: "right" }]);
     const lin = (rot, l, extra) => ({ ...extra, celulas: [rot, moeda(l.estimado), moeda(l.realizado)].concat(comp ? [] : [moeda(l.aPagar)]).concat([moeda(l.saldo)]),
@@ -5800,7 +5798,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>Prévia da prestação de contas</div>
-            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · {p.datasModulos ? `Início do empreendimento: ${dia(p.inicio)} · datas de cada módulo no quadro Por módulo` : `Início: ${dia(p.inicio)} · Término: ${dia(p.termino)}`}</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · {p.datasModulos ? `Início do empreendimento: ${dia(p.inicio)}` : `Início: ${dia(p.inicio)} · Término: ${dia(p.termino)}`}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>Confira os números. Gerar PDF baixa só o relatório (rápido); Gerar com comprovantes baixa o pacote completo, com a planilha e os arquivos.</div>
           </div>
           {botoes}
@@ -5816,8 +5814,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {mods && mods.length > 0 && (
           <div style={caixa} data-vk-previa-modulos="1">
-            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. % realizado = custo realizado ÷ estimado (só módulos com estimativa). Vendas estimadas = recebidas + a receber."
-              + ((() => { const t = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · "); return t ? " Datas da obra — " + t + "." : ""; })()))}
+            {titulo(++k, "Por módulo")}
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: 780, borderCollapse: "collapse" }}>
                 <thead><tr>{["Módulo", "% realizado"].concat(CP_COLUNAS_POR_MODULO.map((c) => c[1])).map((t, j) =>
@@ -5886,7 +5883,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {ff && (
           <div style={caixa} data-vk-previa-ff="1">
-            {titulo(++k, "Físico-financeiro", comp ? "Competência: realizado é tudo o que foi lançado." : "Caixa: realizado é o que foi pago; o resto em A pagar.")}
+            {titulo(++k, "Físico-financeiro")}
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: comp ? 520 : 640, borderCollapse: "collapse" }}>
                 <thead><tr>{["Conta", "Estimado", comp ? "Realizado (lançado)" : "Realizado (pago)"].concat(comp ? [] : ["A pagar"]).concat(["Saldo"]).map((t, j) =>
