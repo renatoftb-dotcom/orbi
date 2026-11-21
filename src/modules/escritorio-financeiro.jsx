@@ -10646,6 +10646,12 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   useEffect(() => {
     if (!temExtrato || typeof window === "undefined") return undefined;
     const aoColar = (e) => {
+      // Já tratado por outro campo (o anexo do lançamento), ou há um campo de
+      // anexo aberto na tela, ou colando dentro de um campo de texto: o
+      // arquivo não é extrato.
+      if (e.defaultPrevented || (window.__vkCampoAnexoNaTela || 0) > 0) return;
+      const alvo = e.target;
+      if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable)) return;
       const f = arquivoDoColar(e.clipboardData);
       if (!f || !receberRef.current) return;
       e.preventDefault();

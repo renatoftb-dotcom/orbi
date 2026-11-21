@@ -141,6 +141,11 @@ const TXT_DEFAULT_ESCOPO_MARCENARIA = {
 };
 
 const TXT_PRAZO_MARCENARIA = "Prazo estimado para entrega do Projeto de Marcenaria: 30 dias úteis após contratação.";
+// Com o arquitetônico na mesma proposta, a marcenaria depende dele aprovado.
+const TXT_PRAZO_MARCENARIA_COM_ARQ = "Projeto de Marcenaria: iniciado somente após a aprovação do projeto arquitetônico, com entrega em 30 dias úteis a partir dessa aprovação. Em construção nova, o prazo pode ser definido ao longo da obra, conforme o andamento da construção.";
+function txtPrazoMarcenaria(incluiArq) {
+  return incluiArq ? TXT_PRAZO_MARCENARIA_COM_ARQ : TXT_PRAZO_MARCENARIA;
+}
 
 // Separador entre blocos do escopo em texto (o mesmo que o modelo divide).
 const TXT_SEPARADOR_ESCOPO = "\n\n────────\n\n";
@@ -161,7 +166,7 @@ function txtNaoInclusosPadraoDoOrcamento(d) {
 function txtPrazoPadraoDoOrcamento(d) {
   if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_PRAZO;
   const lista = d.incluiArq !== false ? [...TXT_DEFAULT_PRAZO] : TXT_DEFAULT_PRAZO.filter(p => !/arquitet/i.test(p));
-  return [...lista, TXT_PRAZO_MARCENARIA];
+  return [...lista, txtPrazoMarcenaria(d.incluiArq !== false)];
 }
 
 // Escopo em texto (Template) x marcenaria ligada/desligada depois de o

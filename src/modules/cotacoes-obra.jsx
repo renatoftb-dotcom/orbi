@@ -13083,7 +13083,13 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
       receber(comNome);
     };
     document.addEventListener("paste", aoColar);
-    return () => document.removeEventListener("paste", aoColar);
+    // Enquanto este campo está na tela, o Ctrl+V de arquivo é dele: outras
+    // telas por baixo (o fechamento do mês lê extrato colado) ficam de fora.
+    if (typeof window !== "undefined") window.__vkCampoAnexoNaTela = (window.__vkCampoAnexoNaTela || 0) + 1;
+    return () => {
+      document.removeEventListener("paste", aoColar);
+      if (typeof window !== "undefined") window.__vkCampoAnexoNaTela = Math.max(0, (window.__vkCampoAnexoNaTela || 0) - 1);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anexo, enviando, categoria]);
 

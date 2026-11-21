@@ -22834,6 +22834,12 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   useEffect(() => {
     if (!temExtrato || typeof window === "undefined") return undefined;
     const aoColar = (e) => {
+      // Já tratado por outro campo (o anexo do lançamento), ou há um campo de
+      // anexo aberto na tela, ou colando dentro de um campo de texto: o
+      // arquivo não é extrato.
+      if (e.defaultPrevented || (window.__vkCampoAnexoNaTela || 0) > 0) return;
+      const alvo = e.target;
+      if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable)) return;
       const f = arquivoDoColar(e.clipboardData);
       if (!f || !receberRef.current) return;
       e.preventDefault();
@@ -57066,7 +57072,13 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
       receber(comNome);
     };
     document.addEventListener("paste", aoColar);
-    return () => document.removeEventListener("paste", aoColar);
+    // Enquanto este campo está na tela, o Ctrl+V de arquivo é dele: outras
+    // telas por baixo (o fechamento do mês lê extrato colado) ficam de fora.
+    if (typeof window !== "undefined") window.__vkCampoAnexoNaTela = (window.__vkCampoAnexoNaTela || 0) + 1;
+    return () => {
+      document.removeEventListener("paste", aoColar);
+      if (typeof window !== "undefined") window.__vkCampoAnexoNaTela = Math.max(0, (window.__vkCampoAnexoNaTela || 0) - 1);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anexo, enviando, categoria]);
 
@@ -67725,6 +67737,11 @@ const TXT_DEFAULT_ESCOPO_MARCENARIA = {
 };
 
 const TXT_PRAZO_MARCENARIA = "Prazo estimado para entrega do Projeto de Marcenaria: 30 dias úteis após contratação.";
+// Com o arquitetônico na mesma proposta, a marcenaria depende dele aprovado.
+const TXT_PRAZO_MARCENARIA_COM_ARQ = "Projeto de Marcenaria: iniciado somente após a aprovação do projeto arquitetônico, com entrega em 30 dias úteis a partir dessa aprovação. Em construção nova, o prazo pode ser definido ao longo da obra, conforme o andamento da construção.";
+function txtPrazoMarcenaria(incluiArq) {
+  return incluiArq ? TXT_PRAZO_MARCENARIA_COM_ARQ : TXT_PRAZO_MARCENARIA;
+}
 
 // Separador entre blocos do escopo em texto (o mesmo que o modelo divide).
 const TXT_SEPARADOR_ESCOPO = "\n\n────────\n\n";
@@ -67745,7 +67762,7 @@ function txtNaoInclusosPadraoDoOrcamento(d) {
 function txtPrazoPadraoDoOrcamento(d) {
   if (!(d && d.incluiMarcenaria)) return TXT_DEFAULT_PRAZO;
   const lista = d.incluiArq !== false ? [...TXT_DEFAULT_PRAZO] : TXT_DEFAULT_PRAZO.filter(p => !/arquitet/i.test(p));
-  return [...lista, TXT_PRAZO_MARCENARIA];
+  return [...lista, txtPrazoMarcenaria(d.incluiArq !== false)];
 }
 
 // Escopo em texto (Template) x marcenaria ligada/desligada depois de o
@@ -68709,13 +68726,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     ? [
        ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação."] : []),
        ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
-       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
+       ...(marcAtiva ? [txtPrazoMarcenaria(incluiArq)] : []),
       ]
     : [
        ...(incluiArq || engAtiva ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
-       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
+       ...(marcAtiva ? [txtPrazoMarcenaria(incluiArq)] : []),
       ];
 
   // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os

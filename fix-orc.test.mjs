@@ -340,6 +340,8 @@ teste("16. Marcenaria: 60% da arq calculada; entra no total/ganho só se incluí
   assert.ok(X.txtNaoInclusosPadraoDoOrcamento({}).some((l) => /marcenaria/i.test(l)));
   const prazoSo = X.txtPrazoPadraoDoOrcamento({ incluiMarcenaria: true, incluiArq: false });
   assert.ok(prazoSo.some((p) => /marcenaria/i.test(p)) && !prazoSo.some((p) => /arquitet/i.test(p)));
+  const prazoJunto = X.txtPrazoPadraoDoOrcamento({ incluiMarcenaria: true }).filter((p) => /marcenaria/i.test(p));
+  assert.ok(prazoJunto.length === 1 && /aprovação do projeto arquitetônico/.test(prazoJunto[0]) && /ao longo da obra/.test(prazoJunto[0]));
   // escopo salvo no Template antes de ligar a marcenaria: ganha o bloco; desligada, sai
   const texto = X.txtFormatarEscopoComoTexto(X.TXT_DEFAULT_ESCOPO_ETAPAS);
   assert.strictEqual(X.txtEscopoAjustarMarcenaria(texto, false), texto, "sem marcenaria, intocado");

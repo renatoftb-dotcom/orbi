@@ -704,13 +704,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     ? [
        ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação."] : []),
        ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
-       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
+       ...(marcAtiva ? [txtPrazoMarcenaria(incluiArq)] : []),
       ]
     : [
        ...(incluiArq || engAtiva ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
-       ...(marcAtiva ? [TXT_PRAZO_MARCENARIA] : []),
+       ...(marcAtiva ? [txtPrazoMarcenaria(incluiArq)] : []),
       ];
 
   // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os
