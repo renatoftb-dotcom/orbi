@@ -18925,6 +18925,24 @@ function somarChecagens(lista) {
     transferencias: { debitos: c(transferencias.debitos), creditos: c(transferencias.creditos) } };
 }
 
+// Os nomes de quem emitiu o papel, na ordem em que vale procurar no
+// cadastro: o fantasia e a razão social inteiros e, quando vêm juntos
+// ("Loja X (Razão Social Ltda)" / "Loja X - Razão"), cada parte separada.
+function efNomesDoPapel(pa) {
+  const p = pa || {};
+  const out = [];
+  const por = (n) => { const t = String(n || "").replace(/\s+/g, " ").trim(); if (t.length >= 3 && out.indexOf(t) < 0) out.push(t); };
+  const brutos = [p.fantasia, p.lidoComo].filter(Boolean);
+  for (const n of brutos) {
+    const m = String(n).match(/^(.*?)\s*\((.*)\)\s*$/);
+    if (m) { por(m[1]); por(m[2]); }
+    String(n).split(/\s+[-–]\s+/).forEach((x, i, arr) => { if (arr.length > 1) por(x); });
+  }
+  // o inteiro por último quando tem partes (o inteiro "X (Y)" não é nome de ninguém)
+  for (const n of brutos) por(n);
+  return out;
+}
+
 // Quando o arquivo foi trazido para o VICKE: "21/11 às 14:32" (hora local).
 function efQuandoTrazido(iso) {
   const d = iso ? new Date(iso) : null;
@@ -19790,9 +19808,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const emitente = pa.fantasia || pa.lidoComo || "";
     const pelaCnpj = digitos(pa.cnpj).length >= 11
       ? (prestadores || []).find((x) => x && digitos(x.cnpjCpf) === digitos(pa.cnpj)) : null;
-    const doCadastro = pelaCnpj || (pa.lidoComo && typeof prestadorDoComprovante === "function"
-      ? (prestadorDoComprovante(prestadores || [], pa.lidoComo) || (pa.fantasia ? prestadorDoComprovante(prestadores || [], pa.fantasia) : null))
-      : null);
+    // Pelo nome: o fantasia e a razão social inteiros e, quando o papel junta
+    // os dois ("Loja X (Razão Social Ltda)"), cada um separado.
+    const nomesLidos = efNomesDoPapel(pa);
+    let doCadastro = pelaCnpj || null;
+    if (!doCadastro && typeof prestadorDoComprovante === "function") {
+      for (const n of nomesLidos) { doCadastro = prestadorDoComprovante(prestadores || [], n); if (doCadastro) break; }
+    }
     // Itens de nota, pedido ou cupom — casados com o catálogo.
     const comItens = (ficha.itens || []).filter((x) => x && String(x.descricao || "").trim());
     // Numa receita o papel é o comprovante do que entrou: sem itens, sem
@@ -19850,8 +19872,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       // receita: quem presta o serviço é o escritório — o nome do banco ou
       // de quem assinou o cheque não vira fornecedor
       const semFornecedor = !entrada && !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
+      // Fornecedor só do cadastro, com o nome de lá. O nome como veio no papel
+      // não entra no campo: fica o aviso para escolher na lista ou cadastrar.
       if (semFornecedor && doCadastro) { novo.fornecedorId = doCadastro.id; novo.fornecedor = doCadastro.nome || ""; }
-      else if (semFornecedor && emitente) novo.fornecedor = emitente;
       const nota = pa.numeroNota || pa.numeroPedido || "";
       if (nota && !/\d/.test(String(p.documento || ""))) novo.documento = String(nota);
       if (!String(p.descricao || "").trim() || p.descricao === p.historicoBanco) {
@@ -21025,14 +21048,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           {lida.itens ? ` · ${lida.itens} ${lida.itens === 1 ? "item" : "itens"}, ${lida.casados} no catálogo` : ""}
           <span style={{ color: "#9ca3af" }}> — lido {lida.origem === "xml" ? "do XML" : lida.origem === "ia" ? "pela IA" : "pelo leitor do VICKE"}</span>
           {lida.cadastro ? <span style={{ color: "#0474f4" }}> · fornecedor {lida.cadastro.nome}</span>
-            : (lida.papel.lidoComo && !entradaNoForm && !f.fornecedorId && !novoPrest && (
+            : (lida.papel.lidoComo && !entradaNoForm && !f.fornecedorId && !novoPrest && (<>
+              <span data-vk-fornecedor-fora-do-cadastro style={{ color: "#b45309" }}> · fornecedor fora do cadastro — escolha em Fornecedor ou</span>
               <button type="button" style={{ background: "none", border: "none", padding: 0, marginLeft: 6, fontSize: 12, color: "#0474f4",
                 cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
-                onClick={() => { setErroPrest(""); setNovoPrest({ nome: lida.papel.fantasia || lida.papel.lidoComo, categoria: "Loja / Comércio",
+                onClick={() => { setErroPrest(""); setNovoPrest({ nome: efNomesDoPapel(lida.papel)[0] || lida.papel.fantasia || lida.papel.lidoComo, categoria: "Loja / Comércio",
                   cnpjCpf: lida.papel.cnpj || "" }); }}>
-                + cadastrar {lida.papel.fantasia || lida.papel.lidoComo}
+                + cadastrar {efNomesDoPapel(lida.papel)[0] || lida.papel.fantasia || lida.papel.lidoComo}
               </button>
-            ))}
+            </>))}
         </div>
       )}
       {!naObra && !entradaNoForm && (f.itens || []).length > 0 && (
