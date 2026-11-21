@@ -6745,10 +6745,15 @@ function efNomesDoPapel(pa) {
   const out = [];
   const por = (n) => { const t = String(n || "").replace(/\s+/g, " ").trim(); if (t.length >= 3 && out.indexOf(t) < 0) out.push(t); };
   const brutos = [p.fantasia, p.lidoComo].filter(Boolean);
+  // A parte de fora/antes vale sempre; a de dentro dos parênteses ou depois
+  // do traço só com duas palavras ou mais — sozinha costuma ser a cidade
+  // ("NG Materiais - Jacarezinho"), que casava com "Prefeitura Jacarezinho".
+  const duasPalavras = (t) => String(t || "").trim().split(/\s+/).length >= 2;
   for (const n of brutos) {
     const m = String(n).match(/^(.*?)\s*\((.*)\)\s*$/);
-    if (m) { por(m[1]); por(m[2]); }
-    String(n).split(/\s+[-–]\s+/).forEach((x, i, arr) => { if (arr.length > 1) por(x); });
+    if (m) { por(m[1]); if (duasPalavras(m[2])) por(m[2]); }
+    const partes = String(n).split(/\s+[-–]\s+/);
+    if (partes.length > 1) partes.forEach((x, i) => { if (i === 0 || duasPalavras(x)) por(x); });
   }
   // o inteiro por último quando tem partes (o inteiro "X (Y)" não é nome de ninguém)
   for (const n of brutos) por(n);
@@ -7623,9 +7628,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     // Pelo nome: o fantasia e a razão social inteiros e, quando o papel junta
     // os dois ("Loja X (Razão Social Ltda)"), cada um separado.
     const nomesLidos = efNomesDoPapel(pa);
+    // Nomes diferentes do mesmo papel apontando para cadastros diferentes:
+    // não adivinha — fica para a pessoa escolher.
     let doCadastro = pelaCnpj || null;
     if (!doCadastro && typeof prestadorDoComprovante === "function") {
-      for (const n of nomesLidos) { doCadastro = prestadorDoComprovante(prestadores || [], n); if (doCadastro) break; }
+      const achados = [];
+      // Uma palavra só ("Jacarezinho") casa apenas com o nome igual — dentro
+      // de "Prefeitura Jacarezinho" ela não identifica ninguém.
+      const igual = (x, n) => efSemAcento(String((x && x.nome) || "")).trim() === efSemAcento(n).trim();
+      for (const n of nomesLidos) {
+        const x = prestadorDoComprovante(prestadores || [], n);
+        if (!x || (n.trim().split(/\s+/).length < 2 && !igual(x, n))) continue;
+        if (achados.indexOf(x) < 0) achados.push(x);
+      }
+      doCadastro = achados.length === 1 ? achados[0] : null;
     }
     // Itens de nota, pedido ou cupom — casados com o catálogo.
     const comItens = (ficha.itens || []).filter((x) => x && String(x.descricao || "").trim());

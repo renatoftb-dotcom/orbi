@@ -3527,6 +3527,9 @@ teste("conferência unificada: junta as contas, tira a transferência do débito
   assert.deepStrictEqual(M.efNomesDoPapel({ lidoComo: "Loja Exemplo (Razão Exemplo Ltda)" }), ["Loja Exemplo", "Razão Exemplo Ltda", "Loja Exemplo (Razão Exemplo Ltda)"]);
   assert.deepStrictEqual(M.efNomesDoPapel({ fantasia: "Loja Exemplo", lidoComo: "Razão Exemplo Ltda" }), ["Loja Exemplo", "Razão Exemplo Ltda"]);
   assert.deepStrictEqual(M.efNomesDoPapel({}), []);
+  // a cidade depois do traço / nos parênteses não vira nome para procurar
+  assert.deepStrictEqual(M.efNomesDoPapel({ lidoComo: "Loja Exemplo - Cidade" }), ["Loja Exemplo", "Loja Exemplo - Cidade"]);
+  assert.deepStrictEqual(M.efNomesDoPapel({ lidoComo: "Loja Exemplo (Cidade)" }), ["Loja Exemplo", "Loja Exemplo (Cidade)"]);
   // conta sem extrato no mês: não acusa os lançamentos dela
   const u2 = M.conferenciaUnificada({ fin: { extratos: sic }, contas, cartoes: [], lancamentos: lancs, mes: "2026-09" });
   assert.strictEqual(u2.resultado.contabilizadoSemPar.length, 0);
