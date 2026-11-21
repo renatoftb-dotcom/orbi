@@ -6346,6 +6346,7 @@ function conferenciaDaFatura(cartao, guardada, obras, lancamentos, competencia, 
     casadas, faltam, naoLancar, soNoVicke,
     totalArquivo, totalVicke: fatura.total, linhasVicke: fatura.linhas,
     jaFechada: fatura.jaFechada, lancamentoDaFatura: lancFatura,
+    trazidoEm: (doArquivo.length && guardada && guardada.atualizadoEm) || "",
     pronta: doArquivo.length > 0 && !fatura.jaFechada && !faltam.length && !soNoVicke.length
       && Math.abs(totalArquivo - fatura.total) < 0.01 && fatura.total > 0,
   };
@@ -6736,6 +6737,14 @@ function somarChecagens(lista) {
     transferencias: { debitos: c(transferencias.debitos), creditos: c(transferencias.creditos) } };
 }
 
+// Quando o arquivo foi trazido para o VICKE: "21/11 às 14:32" (hora local).
+function efQuandoTrazido(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d.getTime())) return "";
+  const p2 = (n) => String(n).padStart(2, "0");
+  return `${p2(d.getDate())}/${p2(d.getMonth() + 1)} às ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
 // A conferência do mês com tudo junto: cada conta com o extrato dela, cada
 // cartão com a fatura paga no mês. Cada linha da fila sai marcada com o meio
 // (_meio: a conta ou o cartão) — é por ele que o lançamento nasce no lugar
@@ -6756,7 +6765,8 @@ function conferenciaUnificada(opcoes) {
     const dosMovimentos = movs.filter((m) => efEhMovimento(m.historico));
     const meio = { id: conta.id, tipo: "conta", nome: conta.nome, conta, linhas: dosMovimentos.length,
       ultimoDia: dosMovimentos.map((m) => String(m.data || "").slice(0, 10)).sort().pop() || "",
-      guardado, lancamentos: lancs.length, conciliacao: null, checagem: null };
+      guardado, trazidoEm: (guardado && guardado.atualizadoEm) || "",
+      lancamentos: lancs.length, conciliacao: null, checagem: null };
     if (movs.length) {
       const r = conciliarExtrato(movs, lancs, { ignorados: ignoradosGuardados(ext), fornecedores: o.fornecedores || [], historico: lancamentos });
       const marca = (m) => ({ ...m, _meio: conta.id });
@@ -10394,21 +10404,23 @@ function QuadroDosMeios({ unificado, mes, fechado, ocupado, semCartoes }) {
 // checklist marca, com o ponto azul, o que já chegou. Dá para pular.
 function itensDoChecklist(meios, mes) {
   const dia = (d) => String(d || "").slice(0, 10).split("-").reverse().slice(0, 2).join("/");
+  const trazido = (iso) => { const q = efQuandoTrazido(iso); return q ? " · trazido em " + q : ""; };
   const itens = [];
   for (const mi of meios || []) {
     if (mi.tipo === "conta") {
       itens.push({ id: mi.id, nome: mi.nome, tipo: "conta", feito: mi.linhas > 0,
-        detalhe: mi.linhas > 0 ? `${mi.linhas} ${mi.linhas === 1 ? "linha" : "linhas"}${mi.ultimoDia ? " · até " + dia(mi.ultimoDia) : ""}` : "falta o extrato" });
+        detalhe: mi.linhas > 0 ? `${mi.linhas} ${mi.linhas === 1 ? "linha" : "linhas"}${mi.ultimoDia ? " · até " + dia(mi.ultimoDia) : ""}${trazido(mi.trazidoEm)}` : "falta o extrato" });
       continue;
     }
     const fs = mi.faturas || [];
     const fechada = fs.find((f) => f.jaFechada);
     const comArquivo = fs.find((f) => f.temArquivo);
     const esperada = fs.find((f) => f.linhasVicke && f.linhasVicke.length);
+    const comData = fs.find((f) => f.trazidoEm);
     itens.push({ id: mi.id, nome: mi.nome, tipo: "cartao", feito: !!(fechada || comArquivo),
       opcional: !fs.length,
-      detalhe: fechada ? `fatura de ${mesAnoPorExtenso(fechada.competencia)} fechada`
-        : comArquivo ? `fatura de ${mesAnoPorExtenso(comArquivo.competencia)} · ${comArquivo.casadas.length + comArquivo.faltam.length} compras`
+      detalhe: fechada ? `fatura de ${mesAnoPorExtenso(fechada.competencia)} fechada${trazido(comData && comData.trazidoEm)}`
+        : comArquivo ? `fatura de ${mesAnoPorExtenso(comArquivo.competencia)} · ${comArquivo.casadas.length + comArquivo.faltam.length} compras${trazido(comArquivo.trazidoEm)}`
         : esperada ? `falta a fatura de ${mesAnoPorExtenso(esperada.competencia)}`
         : "traga a fatura do mês, se houver" });
   }
