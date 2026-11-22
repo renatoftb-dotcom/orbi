@@ -1071,6 +1071,15 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
   const [lendo, setLendo] = useState(false);
   const dia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "");
   const [sobre, setSobre] = useState(false);
+  // o texto do CSV (do arquivo ou colado) vira a procura guardada
+  const gravarTexto = (texto, nomeArquivo) => {
+    const p = procuraDoCsv(texto);
+    setLendo(false);
+    if (p.erro) { setMsg({ erro: true, texto: p.erro }); return; }
+    const nova = { dias: p.dias, total: p.total, de: p.de, ate: p.ate, arquivo: nomeArquivo, enviadoEm: new Date().toISOString() };
+    Promise.resolve(aoGravar(nova)).then(() => setMsg({ texto: `${p.total} cadastros de ${dia(p.de)} a ${dia(p.ate)} — atualizado.` }))
+      .catch(() => setMsg({ erro: true, texto: "Não consegui gravar. Tente de novo." }));
+  };
   const lerArquivo = (f) => {
     if (!f || !podeEditar) return;
     setLendo(true); setMsg(null);
@@ -1079,16 +1088,34 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
       let texto = new TextDecoder("utf-8").decode(fr.result);
       // planilha salva no Excel vem em Windows-1252: sem isso, os acentos quebram
       if (texto.indexOf("\uFFFD") >= 0) { try { texto = new TextDecoder("windows-1252").decode(fr.result); } catch (e) { /* fica o utf-8 */ } }
-      const p = procuraDoCsv(texto);
-      setLendo(false);
-      if (p.erro) { setMsg({ erro: true, texto: p.erro }); return; }
-      const nova = { dias: p.dias, total: p.total, de: p.de, ate: p.ate, arquivo: f.name, enviadoEm: new Date().toISOString() };
-      Promise.resolve(aoGravar(nova)).then(() => setMsg({ texto: `${p.total} cadastros de ${dia(p.de)} a ${dia(p.ate)} — atualizado.` }))
-        .catch(() => setMsg({ erro: true, texto: "Não consegui gravar. Tente de novo." }));
+      gravarTexto(texto, f.name);
     };
     fr.onerror = () => { setLendo(false); setMsg({ erro: true, texto: "Não consegui ler o arquivo." }); };
     fr.readAsArrayBuffer(f);
   };
+  // Ctrl+V em qualquer ponto da tela: o arquivo copiado no Explorer, ou as
+  // linhas copiadas da planilha (com o cabeçalho). Colar dentro de um campo
+  // de texto segue normal.
+  const colarRef = useRef(null);
+  colarRef.current = (e) => {
+    if (!podeEditar || e.defaultPrevented) return;
+    const alvo = e.target;
+    if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable)) return;
+    const d = e.clipboardData;
+    const f = d && d.files && d.files[0];
+    if (f) { e.preventDefault(); lerArquivo(f); return; }
+    const texto = d && typeof d.getData === "function" ? String(d.getData("text/plain") || "") : "";
+    if (texto.indexOf("\n") < 0) return;
+    e.preventDefault(); setMsg(null);
+    // da planilha vem separado por tabulação; o leitor espera o CSV
+    gravarTexto(texto.indexOf("\t") >= 0 ? texto.replace(/\t/g, ";") : texto, "colado em " + new Date().toLocaleDateString("pt-BR"));
+  };
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const aoColar = (e) => colarRef.current && colarRef.current(e);
+    document.addEventListener("paste", aoColar);
+    return () => document.removeEventListener("paste", aoColar);
+  }, []);
   const ler = (ev) => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; lerArquivo(f); };
   // o campo: arrasta o arquivo para dentro ou clica para escolher
   const campo = podeEditar && (
@@ -1098,9 +1125,9 @@ function ProcuraDoEmpreendimento({ procura, podeEditar, isMobile, aoGravar, aoVo
       style={{ display: "block", border: `1.5px dashed ${sobre ? "#0474f4" : "#cbd5e1"}`, borderRadius: 12, background: sobre ? "#f2f7ff" : "#fff",
         padding: r ? "12px 14px" : "26px 16px", textAlign: "center", cursor: lendo ? "wait" : "pointer" }}>
       <div style={{ fontSize: r ? 13 : 14, fontWeight: 600, color: "#111827" }}>
-        {lendo ? "Lendo o arquivo…" : r ? "Arraste aqui o CSV novo para atualizar, ou clique para escolher" : "Arraste aqui o CSV de simulações do site, ou clique para escolher"}
+        {lendo ? "Lendo o arquivo…" : r ? "Arraste aqui o CSV novo para atualizar, cole com Ctrl+V ou clique para escolher" : "Arraste aqui o CSV de simulações do site, cole com Ctrl+V ou clique para escolher"}
       </div>
-      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>Só a data do cadastro e a situação ficam guardadas.</div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>Vale o arquivo ou as linhas copiadas da planilha, com o cabeçalho. Só a data do cadastro e a situação ficam guardadas.</div>
       <input type="file" accept=".csv,text/csv" onChange={ler} style={{ display: "none" }} />
     </label>
   );
