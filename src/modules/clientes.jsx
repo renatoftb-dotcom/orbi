@@ -2040,7 +2040,7 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
     const cols = [
       { t: "Macro-etapa", w: 24 }, { t: "Etapa", w: 30 }, { t: "Item", w: 44 }, { t: "Código", w: 11 }, { t: "Unidade", w: 10 },
       { t: "Qtd orçada", w: 11, f: "General" }, { t: "R$ orçado", w: 14, f: '"R$" #,##0.00' },
-      { t: "Qtd paga", w: 11, f: "General" }, { t: "R$ pago", w: 14, f: '"R$" #,##0.00' },
+      { t: "Qtd realizada", w: 13, f: "General" }, { t: "R$ realizado", w: 14, f: '"R$" #,##0.00' },
       { t: "R$ a pagar", w: 13, f: '"R$" #,##0.00' }, { t: "Saldo R$", w: 14, f: '"R$" #,##0.00;[Red]-"R$" #,##0.00' },
       { t: "Saldo qtd", w: 11, f: "General" }, { t: "% gasto", w: 9, f: "0.0%" },
     ];
@@ -2112,7 +2112,7 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
           O mesmo item, na mesma etapa e no mesmo pavimento, dos dois lados. Etapa, grupo e conta vêm do catálogo.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0,1fr))", gap: 12, marginTop: 12 }}>
-          {[["Orçado", t.orcado, "#111827"], ["Pago", t.realizado, "#111827"], ["A pagar", t.aPagar, "#4b5563"],
+          {[["Orçado", t.orcado, "#111827"], ["Realizado", t.realizado, "#111827"], ["A pagar", t.aPagar, "#4b5563"],
             [t.saldo < 0 ? "Passou em" : "Saldo", Math.abs(t.saldo || 0), t.saldo < -0.005 ? "#dc2626" : "#111827"]].map(([rot, v, cor]) => (
             <div key={rot}>
               <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{rot}</div>
@@ -2126,7 +2126,7 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
         <button onClick={() => setPorEtapa(true)} style={botao(porEtapa)}>Por etapa</button>
         <button onClick={() => setPorEtapa(false)} style={botao(!porEtapa)} title="Junta o item de todas as etapas numa linha">Só por item</button>
         <span style={{ width: 8 }} />
-        {[["todos", "Todos"], ["diferenca", "Com diferença"], ["semOrcado", "Pago sem orçado"], ["semPago", "Orçado sem pago"]].map(([v, rot]) => (
+        {[["todos", "Todos"], ["diferenca", "Com diferença"], ["semOrcado", "Realizado sem orçado"], ["semPago", "Orçado sem realizado"]].map(([v, rot]) => (
           <button key={v} onClick={() => setFiltro(v)} style={botao(filtro === v)}>{rot}</button>
         ))}
         <button onClick={exportar} disabled={exportando} data-vk-exportar-orcado-realizado="1"
@@ -2182,8 +2182,8 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
                         <span style={cab}>Item</span>
                         <span style={{ ...cab, textAlign: "right" }}>Qtd orçada</span>
                         <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>
-                        <span style={{ ...cab, textAlign: "right" }}>Qtd paga</span>
-                        <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Qtd realizada</span>
+                        <span style={{ ...cab, textAlign: "right" }}>R$ realizado</span>
                         <span style={{ ...cab, textAlign: "right" }}>Saldo</span>
                       </div>
                     )}
@@ -2200,6 +2200,7 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
                               {Math.abs(it.saldo) >= 0.01 && <span style={{ color: corSaldo(it.saldo) }}>{(it.qtdOrcada || it.qtdRealizada) ? " · " : ""}saldo {num(it.saldo)}</span>}
                             </span>
                           )}
+                          {it.aVencer > 0 && <span style={{ display: "block", fontSize: 10.5, color: "#b45309" }}>comprado a prazo, a pagar {fmtBRL(it.aVencer)} (já no realizado)</span>}
                           {it.aPagar > 0 && <span style={{ display: "block", fontSize: 10.5, color: "#b45309" }}>a pagar {fmtBRL(it.aPagar)}</span>}
                         </span>
                         {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{qtd(it.qtdOrcada)} {it.qtdOrcada ? it.unidade : ""}</span>}

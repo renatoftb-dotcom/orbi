@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, cpMoverMarco, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, cpMoverMarco, contaNoRealizado, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2809,6 +2809,15 @@ teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (t
   const L = modulo.linhasDaBase([{ id: "o1", nome: "Obra", contasPagar: r.contas }], {});
   const pc = modulo.prestacaoDeContas(L);
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
+});
+
+teste("realizado: pago, cartão e compra a prazo (pedido) entram; parcela de contrato a pagar não", () => {
+  assert.strictEqual(modulo.contaNoRealizado({ pago: true, valor: 10 }), true);
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10, parcelaCartao: { grupo: "g" } }), true);
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 155.72, pedidoId: "p1" }), true, "boleto da compra a vencer: o material já está na obra");
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10833.33, contratoId: "c1" }), false, "parcela de contrato: serviço ainda por fazer");
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10, pedidoId: "p1", contratoId: "c1" }), false);
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500 }), false, "conta avulsa a pagar continua fora");
 });
 
 teste("linhas de chamada à mão: pôr, trocar, apagar; por chave (todos / obra); viram os marcos do gráfico", () => {

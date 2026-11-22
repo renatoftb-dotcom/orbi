@@ -632,8 +632,13 @@ function totaisContas(contas, hoje) {
 // No planejado, a compra no cartão do escritório conta inteira desde o dia
 // da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
 // contas a pagar e na base, cada parcela segue a fatura dela.
+// A compra a prazo (pedido ou nota de material, parcelas no boleto) vale o
+// mesmo: o material já está na obra, é custo executado, pago ou não. A
+// parcela de contrato a pagar não — o serviço dela ainda vai ser feito.
 function contaNoRealizado(c) {
-  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
+  if (!c) return false;
+  if (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)) return true;
+  return !!(c.pedidoId && !c.contratoId && !c.vendaId && Number(c.valor) > 0);
 }
 // A venda de imóvel no Planejamento: o Planejamento acompanha a EXECUÇÃO
 // (gasto × planejado), não apura resultado. Do lado da venda, o realizado é
@@ -2480,7 +2485,7 @@ function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
     const k = chave.indexOf("conta:") === 0 || !porEtapa ? chave : chave + "@" + etapaId;
     if (!linhas[k]) {
       linhas[k] = { chave: k, etapaId: etapaId || "", insumoCodigo: "", contaId: "", nome: "", unidade: "", grupo: "",
-        qtdOrcada: 0, orcado: 0, qtdRealizada: 0, realizado: 0, aPagar: 0, notas: 0, linhasOrcamento: 0, ...base };
+        qtdOrcada: 0, orcado: 0, qtdRealizada: 0, realizado: 0, aPagar: 0, aVencer: 0, notas: 0, linhasOrcamento: 0, ...base };
     }
     return linhas[k];
   };
@@ -2528,6 +2533,8 @@ function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
     const valor = valorNoRealizado(c);
     if (contaNoRealizado(c)) {
       r.realizado = red(r.realizado + valor);
+      // compra a prazo: já está no realizado, ainda não saiu do caixa
+      if (!c.pago && !(c.parcelaCartao && c.parcelaCartao.grupo)) r.aVencer = red(r.aVencer + valor);
       r.notas++;
       if (!contaMO) {
         let q = Number(c.quantidade) || 0;
