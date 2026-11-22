@@ -3919,5 +3919,31 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   assert.deepStrictEqual(modulo.CP_COLUNAS_POR_MODULO.map((c) => c[1]), ["Custo estimado", "Custo realizado", "Vendas estimadas", "Vendas recebidas", "Vendas a receber"]);
 });
 
+teste("competência: a compra a prazo cai no mês da compra, não no do vencimento", () => {
+  // a Entrada a prazo guarda o dia da emissão do papel em todas as parcelas
+  const ps = modulo.contasDaEntrada({ situacao: "apagar", emitido: "2026-11-09", apagar: { vencimento: "2026-12-02", parcelas: 2 },
+    itens: [{ descricao: "Caixa", total: 100, contaId: "material" }] }, { obraId: "o1" });
+  assert.deepStrictEqual(ps.map((c) => [c.vencimento.slice(0, 7), c.compraEm]), [["2026-12", "2026-11-09"], ["2027-01", "2026-11-09"]]);
+  // paga na hora não guarda (no cartão o dia da compra é o da passada)
+  const pg = modulo.contasDaEntrada({ situacao: "pago", emitido: "2026-11-05", pagamento: { data: "2026-11-07" }, itens: [{ descricao: "x", total: 10 }] }, {});
+  assert.strictEqual(pg[0].compraEm, undefined);
+  const obra = { cotacoes: [{ id: "ct", pedidos: [{ id: "pd", data: "2026-09-28" }] }], contasPagar: [
+    // já lançada sem o dia guardado: a chave da NF-e diz o mês (2611)
+    { id: "a", contaId: "material", valor: 669.4, pago: false, vencimento: "2026-12-02", chaveNota: "35261108617563000135550020000053531001882307" },
+    { id: "b", contaId: "material", valor: 669.4, pago: false, vencimento: "2027-01-01", chaveNota: "35261108617563000135550020000053531001882307" },
+    // do pedido da loja: o dia do pedido
+    { id: "c", contaId: "material", valor: 50, pago: false, vencimento: "2026-10-13", pedidoId: "pd" },
+    // código de 44 dígitos que não é NF-e (conta de água): o vencimento
+    { id: "e", contaId: "material", valor: 5, pago: true, pagoEm: "2026-09-23", vencimento: "2026-09-23", chaveNota: "84650000003413400800000000000000000006100020" },
+    // sem como saber a compra: o vencimento
+    { id: "d", contaId: "material", valor: 30, pago: true, pagoEm: "2026-10-01", vencimento: "2026-09-29" }] };
+  const cm = modulo.custosMensais(obra, { regime: "competencia", hoje: "2026-11-22" });
+  const mes = (k) => (cm.meses.find((m) => m.chave === k) || {}).custo || 0;
+  assert.deepStrictEqual([mes("2026-09"), mes("2026-10"), mes("2026-11"), mes("2026-12"), mes("2027-01")], [85, 0, 1338.8, 0, 0]);
+  // no caixa nada muda: cada parcela no vencimento
+  const cx = modulo.custosMensais(obra, { regime: "caixa", hoje: "2026-11-22" });
+  assert.strictEqual((cx.meses.find((m) => m.chave === "2026-12") || {}).aberto, 669.4);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

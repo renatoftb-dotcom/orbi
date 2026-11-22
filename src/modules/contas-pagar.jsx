@@ -1071,6 +1071,10 @@ function contasDaEntrada(lanc, op) {
         valor, vencimento: venc,
         pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
         chaveNota: String(l.chaveNota || "").replace(/\D/g, ""), idTransacao: String(l.idTransacao || "").trim().toUpperCase(),
+        // comprado a prazo: o dia da compra (a emissão do papel) é a
+        // competência de todas as parcelas. Pago na hora, não — no cartão, o
+        // dia da compra é o da passada do cartão, que decide a fatura
+        ...(!pago && /^\d{4}-\d{2}-\d{2}$/.test(String(l.emitido || "").slice(0, 10)) ? { compraEm: String(l.emitido).slice(0, 10) } : {}),
       };
       c = cpLigar(c);
       c = registrarAto(c, "criada", o.quem || "", agora);
@@ -4384,14 +4388,46 @@ function cpContasDoCusto(obra, plano) {
   return ((obra || {}).contasPagar || []).filter((c) => c && !c.vendaId && !cpContaEhEntrada(c.contaId) && !cpContaForaDoFF(c.contaId, plano));
 }
 function cpValorLancado(c) { return Math.round(((c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0) * 100) / 100; }
+// As datas dos pedidos da obra (o pedido da loja guarda o dia da compra),
+// para a competência das contas que nasceram de um pedido.
+function cpDatasDosPedidos(obra) {
+  const m = {};
+  for (const ct of ((obra || {}).cotacoes || [])) for (const p of ((ct || {}).pedidos || [])) {
+    const d = String((p && p.data) || "").slice(0, 10);
+    if (p && p.id && /^\d{4}-\d{2}-\d{2}$/.test(d)) m[p.id] = d;
+  }
+  return m;
+}
+// O dia da compra de uma conta: o guardado nela (a Entrada guarda a emissão
+// do papel; o cartão, o dia da compra), o do pedido de onde ela veio e, por
+// último, o mês de emissão que a chave da NF-e traz (AAMM nas posições 3–6).
+function cpDataDaCompra(c, pedidos) {
+  const iso = (x) => { const d = String(x || "").slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ""; };
+  const guardada = iso(c.compraEm) || iso(c.parcelaCartao && c.parcelaCartao.compraEm);
+  if (guardada) return guardada;
+  const pid = String(c.pedidoId || "");
+  const doPedido = pedidos && pid ? iso(pedidos[pid] || pedidos[pid.split("~")[0]]) : "";
+  if (doPedido) return doPedido;
+  const chave = String(c.chaveNota || "").replace(/\D/g, "");
+  // só a chave de NF-e/NFC-e (modelo 55/65 nas posições 21–22): a conta de
+  // água/luz tem código de 44 dígitos que não traz data nenhuma
+  if (chave.length === 44 && ["55", "65"].indexOf(chave.slice(20, 22)) >= 0) {
+    const ano = 2000 + Number(chave.slice(2, 4)), mes = Number(chave.slice(4, 6));
+    // só o mês: o dia 28 não empurra a compra para a pré-obra do mês em que a obra começou
+    if (mes >= 1 && mes <= 12) return `${ano}-${String(mes).padStart(2, "0")}-28`;
+  }
+  return "";
+}
 // A data da despesa em cada regime: caixa, quando saiu (ou sai) do banco;
-// competência, o vencimento — como a coluna Competência da base.
-function cpDataDaDespesa(c, regime) {
+// competência, quando a compra foi feita.
+function cpDataDaDespesa(c, regime, pedidos) {
   // competência: o mês em que o custo foi contabilizado — a compra (no
-  // cartão, todas as parcelas no mês da compra); sem data de compra, o vencimento
+  // cartão e na compra a prazo, todas as parcelas no mês da compra); sem
+  // como saber a compra (a parcela de contrato, a conta digitada sem papel),
+  // o vencimento
   if (regime === "competencia") {
-    const compra = String(c.compraEm || (c.parcelaCartao && c.parcelaCartao.compraEm) || "").slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(compra) ? compra : String(c.vencimento || c.pagoEm || "").slice(0, 10);
+    const compra = cpDataDaCompra(c, pedidos);
+    return compra || String(c.vencimento || c.pagoEm || "").slice(0, 10);
   }
   return String((c.pago ? c.pagoEm : c.vencimento) || c.vencimento || c.pagoEm || "").slice(0, 10);
 }
@@ -4473,8 +4509,9 @@ function custosMensais(obra, opcoes) {
   const hoje = cpHoje(o);
   const red = (x) => Math.round(x * 100) / 100;
   const por = {};
+  const pedidos = regime === "competencia" ? cpDatasDosPedidos(obra) : null;
   for (const c of cpContasDoCusto(obra, plano)) {
-    const k = cpBalde(cpDataDaDespesa(c, regime), o.inicio, hoje);
+    const k = cpBalde(cpDataDaDespesa(c, regime, pedidos), o.inicio, hoje);
     if (!k) continue;
     const m = por[k] || (por[k] = { pago: 0, vencido: 0, aberto: 0, custo: 0 });
     const v = cpValorLancado(c);
