@@ -41532,6 +41532,24 @@ function cpMoverMarco(lista, mes, dx, dy) {
   const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
   return (lista || []).map((x) => (x && x.mes === mes ? { ...x, dx: r2(dx), dy: Math.max(-6, Math.min(12, r2(dy))) } : x));
 }
+// As chamadas na posição em que foram arrastadas colidem? (o PDF tem meses
+// mais estreitos que a tela: o que coube lá pode encavalar aqui). Cada item:
+// x da linha de chamada, ini/fim do nome, r = linha do nome (para baixo é
+// maior). Colide se dois nomes se encostam na mesma altura, ou se um nome
+// fica sobre a linha de chamada de outro (a linha desce do nome até a barra).
+function cpMarcosColidem(itens, folga) {
+  const g = folga == null ? 0.5 : folga;
+  const l = itens || [];
+  for (let i = 0; i < l.length; i++) {
+    for (let j = 0; j < l.length; j++) {
+      if (i === j) continue;
+      const a = l[i], b = l[j];
+      if (j > i && Math.abs(a.r - b.r) < 1 && a.ini < b.fim + g && b.ini < a.fim + g) return true;
+      if (a.r >= b.r - 0.01 && b.x > a.ini - g && b.x < a.fim + g) return true;
+    }
+  }
+  return false;
+}
 // Onde vai o nome de cada marco e em que linha. O nome fica à direita da
 // linha de chamada; perto da borda direita, à esquerda dela. Um nome que
 // passa por cima da linha de chamada de outro marco fica numa linha acima
@@ -41876,8 +41894,24 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
         return { x: x0 + k * sl + sl / 2, largura: 0.6 + doc.getTextWidth(z.rotulo) }; }), x0 + larg, 0.8);
       doc.setFont("helvetica", "normal");
     }
+    // a posição arrastada na prévia vale no PDF só se couber sem encavalar
+    // (aqui os meses são mais estreitos); senão, o arranjo automático
+    let usarArrasto = false;
+    if (temMarcos && o.marcos.some((z) => Number(z.dx) || Number(z.dy))) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.2);
+      const sl = Math.min(14, larg / Math.max(1, n));
+      const itensM = o.marcos.map((z, q) => {
+        const k = meses.findIndex((m) => m.chave === z.chave);
+        const lg = doc.getTextWidth(z.rotulo);
+        const ini = Math.max(x0, Math.min(x0 + larg - lg, (posMarcosPdf[q] ? posMarcosPdf[q].inicio : x0 + k * sl + sl / 2 + 0.8) + (Number(z.dx) || 0) * sl));
+        return { x: x0 + k * sl + sl / 2, ini, fim: ini + lg, r: ((posMarcosPdf[q] || {}).linha || 0) + (Number(z.dy) || 0) };
+      });
+      doc.setFont("helvetica", "normal");
+      usarArrasto = !cpMarcosColidem(itensM, 0.6);
+    }
+    const marcosPdf = temMarcos ? (usarArrasto ? o.marcos : o.marcos.map((z) => ({ ...z, dx: 0, dy: 0 }))) : [];
     // chamada arrastada para cima ganha espaço no topo
-    const sobeV = temMarcos ? Math.max(0, ...o.marcos.map((z) => -(Number(z.dy) || 0))) * 3.6 : 0;
+    const sobeV = temMarcos ? Math.max(0, ...marcosPdf.map((z) => -(Number(z.dy) || 0))) * 3.6 : 0;
     const topoV = temMarcos ? 2 + sobeV + (Math.max(0, ...posMarcosPdf.map((pm) => pm.linha)) + 1) * 3.6 : 0;
     const escP = maxPos > 0 ? Math.max(1, hPos - topoV) / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
     void total;
@@ -41916,9 +41950,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
         } else if (v > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA); doc.text(curto(v), cx, yy - 1.2, { align: "center" }); doc.setFont("helvetica", "normal"); }
       }
       // o marco: uma linha fina saindo do topo da barra até o nome, em cima
-      const mc = temMarcos ? o.marcos.find((z) => z.chave === m.chave) : null;
+      const mc = temMarcos ? marcosPdf.find((z) => z.chave === m.chave) : null;
       if (mc) {
-        const ordem = o.marcos.indexOf(mc), linha = (posMarcosPdf[ordem] || {}).linha || 0;
+        const ordem = marcosPdf.indexOf(mc), linha = (posMarcosPdf[ordem] || {}).linha || 0;
         // o lugar para onde a chamada foi arrastada na prévia (mesmas unidades)
         const slM = Math.min(14, larg / Math.max(1, n));
         const yTxt = Math.max(y0 + 1.5, y0 + 2.6 + sobeV + linha * 3.6 + (Number(mc.dy) || 0) * 3.6), yBarra = base - Math.max(0, v * escP) - (vertical ? 4.2 : 4.6);

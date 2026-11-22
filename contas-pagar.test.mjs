@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, cpMoverMarco, contaNoRealizado, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, cpMoverMarco, contaNoRealizado, cpMarcosColidem, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2820,6 +2820,14 @@ teste("realizado: pago, cartão, compra a prazo e conta avulsa a pagar entram; p
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10, pedidoId: "p1", contratoId: "c1" }), false);
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500 }), true, "conta avulsa a pagar também é custo lançado");
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500, vendaId: "v1" }), false);
+});
+
+teste("chamadas arrastadas: colisão de nome com nome e de nome sobre a linha de outra", () => {
+  const ok = [{ x: 10, ini: 11, fim: 30, r: 0 }, { x: 50, ini: 51, fim: 70, r: 0 }];
+  assert.strictEqual(modulo.cpMarcosColidem(ok), false);
+  assert.strictEqual(modulo.cpMarcosColidem([{ x: 10, ini: 11, fim: 55, r: 0 }, { x: 50, ini: 51, fim: 70, r: 0 }]), true, "nome encosta no outro");
+  assert.strictEqual(modulo.cpMarcosColidem([{ x: 10, ini: 11, fim: 55, r: 1 }, { x: 50, ini: 51, fim: 70, r: 0 }]), true, "nome sobre a linha de chamada do outro");
+  assert.strictEqual(modulo.cpMarcosColidem([{ x: 10, ini: 11, fim: 55, r: 0 }, { x: 50, ini: 51, fim: 70, r: 1 }]), false, "um acima do outro, sem cruzar");
 });
 
 teste("prestação por competência: o realizado é o mesmo do físico-financeiro (a pagar entra; contrato por fazer não)", () => {
