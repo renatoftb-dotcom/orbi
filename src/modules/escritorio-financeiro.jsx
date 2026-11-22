@@ -6687,12 +6687,18 @@ function aPagarDasObrasNaBase(obras, clientes, opcoes) {
       const grupo = conta && grupoEscritorio(conta.grupo);
       if (grupo && grupo.sinal > 0) continue;
       // como a parcela do cartão: o período contábil é o mês em que o banco
-      // vai debitar (o vencimento); a data do lançamento, o dia da compra
+      // vai debitar (o vencimento); a data do lançamento, o dia em que a
+      // compra entrou no sistema (o mesmo da conta na obra) — nunca uma data
+      // estimada, que podia cair no futuro
       const vence = l.lancadoEm;
       const [c0] = contasLigadasAoLancamento(obComoPaga, l);
-      const compra = (c0 && (typeof cpDataDaCompra === "function" ? cpDataDaCompra(c0) : String(c0.compraEm || "").slice(0, 10))) || vence;
+      const iso = (x) => { const d = String(x || "").slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ""; };
+      const criada = c0 && ((c0.registros || []).find((r) => r && r.ato === "criada") || {}).em;
+      const entrou = (c0 && (criada || c0.importadoEm)) || "";
+      const compra = (c0 && iso(c0.compraEm)) || (typeof cpDiaLocal === "function" ? cpDiaLocal(entrou) : iso(entrou)) || vence;
       const { criadoEm, ...semCriado } = l;
       linhas.push({ ...semCriado, id: "apobra:" + l.id, origem: { ...l.origem, tipo: "aPagarObra", de: l.origem.tipo },
+        ...(entrou ? { criadoEm: entrou } : {}),
         lancadoEm: compra, competencia: String(vence).slice(0, 7),
         descricao: [l.descricao, `a pagar em ${efDiaBR(vence)}`].filter(Boolean).join(" · "),
         _afetaSaldo: false });

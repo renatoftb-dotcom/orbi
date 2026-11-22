@@ -4454,6 +4454,10 @@ teste("compra a prazo da obra: aparece na Base do escritório como a pagar, uma 
   // como a parcela do cartão: data do lançamento = a compra; período = o mês do débito
   assert.strictEqual(ls[0].lancadoEm, "2026-11-09");
   assert.strictEqual(ls[0].criadoEm, undefined);
+  // sem a compra guardada (só a chave da NF-e, que dá o mês): o dia em que entrou no sistema, nunca um dia inventado
+  const semDia = M.aPagarDasObrasNaBase([{ ...obra, contasPagar: [{ id: "z1", contaId: "material", valor: 669.41, pago: false, vencimento: "2026-12-02", pedidoId: "pz",
+    chaveNota: "35261108617563000135550020000053531001882307", registros: [{ em: "2026-11-22T20:58:18.464Z", ato: "criada", por: "Fulano" }] }] }], [cliente], { planoObra: PLANO_OBRA });
+  assert.deepStrictEqual([semDia[0].lancadoEm, semDia[0].criadoEm, semDia[0].competencia], ["2026-11-22", "2026-11-22T20:58:18.464Z", "2026-12"]);
   assert.ok(ls.every((l) => l.id.indexOf("apobra:") === 0));
   // o cliente que paga direto ao fornecedor: nada passa pelo escritório
   const direto = M.aPagarDasObrasNaBase([{ ...obra, clienteId: "c9", clientePagaDireto: true }], [{ id: "c9", nome: "Cliente" }], { planoObra: PLANO_OBRA });
