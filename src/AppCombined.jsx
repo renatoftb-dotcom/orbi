@@ -18851,6 +18851,43 @@ function linhasDaBaseDoAPagar(aPagar) {
     _afetaSaldo: false,
   }));
 }
+// As compras a prazo das obras que ainda não saíram do banco (o boleto da
+// loja): na Base de dados, uma linha por nota e vencimento — a mesma que a
+// ponte vai lançar quando a conta for baixada, na mesma conta do escritório.
+// Não afetam o saldo, como as parcelas do cartão a pagar. Fica de fora o que
+// a ponte não traria (o cliente paga direto ao fornecedor), o cartão (entra
+// pela fatura), a parcela de contrato ainda por fazer, a venda e o que é
+// receita do escritório (o gerenciamento a receber).
+function aPagarDasObrasNaBase(obras, clientes, opcoes) {
+  const linhas = [];
+  for (const ob of obras || []) {
+    if (!ob || !ob.id) continue;
+    const abertas = (ob.contasPagar || []).filter((c) => c && !c.pago && !c.vendaId && !c.contratoId && !c.parcelaCartao
+      && !c.cartaoId && c.formaPagamento !== "cartao" && !Array.isArray(c.movimentos) && Number(c.valor) > 0
+      && /^\d{4}-\d{2}-\d{2}/.test(String(c.vencimento || "")));
+    if (!abertas.length) continue;
+    const cliente = (clientes || []).find((x) => x && x.id === ob.clienteId) || null;
+    const comoPagas = abertas.map((c) => ({ ...c, pago: true, pagoEm: String(c.vencimento).slice(0, 10), valorPago: c.valor }));
+    const r = lancamentosDaObraParaEscritorio(ob, cliente, { ...(opcoes || {}), contasPagar: comoPagas, entradas: [], fechamentos: {}, lancamentos: [] });
+    const obComoPaga = { ...ob, contasPagar: comoPagas };
+    for (const l of r.lancamentos) {
+      const conta = contaEscritorio(l.contaId);
+      const grupo = conta && grupoEscritorio(conta.grupo);
+      if (grupo && grupo.sinal > 0) continue;
+      // como a parcela do cartão: o período contábil é o mês em que o banco
+      // vai debitar (o vencimento); a data do lançamento, o dia da compra
+      const vence = l.lancadoEm;
+      const [c0] = contasLigadasAoLancamento(obComoPaga, l);
+      const compra = (c0 && (typeof cpDataDaCompra === "function" ? cpDataDaCompra(c0) : String(c0.compraEm || "").slice(0, 10))) || vence;
+      const { criadoEm, ...semCriado } = l;
+      linhas.push({ ...semCriado, id: "apobra:" + l.id, origem: { ...l.origem, tipo: "aPagarObra", de: l.origem.tipo },
+        lancadoEm: compra, competencia: String(vence).slice(0, 7),
+        descricao: [l.descricao, `a pagar em ${efDiaBR(vence)}`].filter(Boolean).join(" · "),
+        _afetaSaldo: false });
+    }
+  }
+  return linhas;
+}
 // Excluir uma parcela; com `todas`, ela e as seguintes do mesmo grupo que
 // ainda não foram pagas.
 function aPagarSemParcela(aPagar, itemId, todas) {
@@ -25151,7 +25188,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         const cli = clientes.find((c) => c && c.id === l.clienteId);
         return cli ? { ...l, cliente: cli.nome || "" } : l;
       });
-    return partes.concat(naoAfetam, aPagar, linhasDaBaseDoAPagar(aPagarDoEscritorio(cfgFin)));
+    return partes.concat(naoAfetam, aPagar, linhasDaBaseDoAPagar(aPagarDoEscritorio(cfgFin)),
+      aPagarDasObrasNaBase((data || {}).obras || [], clientes));
   }, [data]);
   // As faturas abertas dos cartões, para o A pagar: as parcelas que ainda
   // vão cair, por cartão e por fatura, no dia em que o banco debita.
@@ -25182,6 +25220,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return l;
   };
   const irParaAPagar = () => { if (aoIrPara) aoIrPara("pagar"); else setAba("pagar"); };
+  const avisarAPagarDaObra = () => dialogo.alertar({ titulo: "Compra a prazo da obra", tipo: "aviso",
+    mensagem: "Esta parcela é de uma compra a prazo lançada na obra: valor, vencimento e baixa ficam no Contas a pagar da obra. Paga, ela vira o lançamento aqui." });
   const avisarCompraDaObra = () => dialogo.alertar({ titulo: "Compra de obra no cartão", tipo: "aviso",
     mensagem: "Esta parcela é de uma compra lançada na obra: valor, data e parcelas mudam lá, no Contas a pagar da obra, ou em Cartões." });
 
@@ -26193,8 +26233,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             lancamentos={lancamentosDaBase} doEscritorio meioDoLancamento={meioDoLancamento}
             acoes={{
               // a compra da fatura é uma parte dela: editar e excluir agem na fatura
-              editar: perm.podeEditar ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } setForm(x); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
-              excluir: perm.podeExcluir ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } excluirLancamento(x); } : null,
+              editar: perm.podeEditar ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } if ((l.origem || {}).tipo === "aPagarObra") { avisarAPagarDaObra(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } setForm(x); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } if ((l.origem || {}).tipo === "aPagarObra") { avisarAPagarDaObra(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } excluirLancamento(x); } : null,
               verPapel: (a) => setVendoComprovante(a),
             }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}

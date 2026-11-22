@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosSemOrcamento, avisoDoOrcamentoQueVolta, projetosDosGanhos, lancamentosSemObra, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, efQuandoTrazido, faturaParaALinhaDoBanco, faturaPagaPeloLancamento, avisoDaFaturaEmDobro, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, contaPeloBancoDoArquivo, obrasComCartaoEmParcelas, compraDoGrupoDoCartao, contaEmParcelasDoCartao, ehParcelaDoCartao, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, efQuandoTrazido, faturaParaALinhaDoBanco, faturaPagaPeloLancamento, avisoDaFaturaEmDobro, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarDasObrasNaBase, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, contaPeloBancoDoArquivo, obrasComCartaoEmParcelas, compraDoGrupoDoCartao, contaEmParcelasDoCartao, ehParcelaDoCartao, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -4434,6 +4434,30 @@ teste("linha do banco: só copia o que foi SEMPRE igual; conta variada vira opç
   // "DEB.TIT.COMPE EFETIVADO" é todo boleto: não ensina nada
   const bol = [{ ...base, contaId: "emp_taxas", valor: 10, historicoBanco: "DEB.TIT.COMPE EFETIVADO", criadoEm: "2026-10-01" }];
   assert.strictEqual(M.sugestaoDoExtrato({ valor: -10, historico: "DEB.TIT.COMPE EFETIVADO" }, bol), null);
+});
+
+teste("compra a prazo da obra: aparece na Base do escritório como a pagar, uma linha por nota e vencimento", () => {
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1", contasPagar: [
+    { id: "a1", contaId: "material", valor: 155.72, pago: false, vencimento: "2026-12-02", pedidoId: "p1", descricao: "Prolongador (parcela 1/2)", favorecido: "Loja", compraEm: "2026-11-09" },
+    { id: "a2", contaId: "material", valor: 397.86, pago: false, vencimento: "2026-12-02", pedidoId: "p1", descricao: "Caixa (parcela 1/2)", favorecido: "Loja" },
+    { id: "b1", contaId: "material", valor: 553.56, pago: false, vencimento: "2027-01-01", pedidoId: "p2", descricao: "Caixa (parcela 2/2)", favorecido: "Loja" },
+    // já paga: é lançamento de verdade, não a pagar
+    { id: "c1", contaId: "material", valor: 50, pago: true, valorPago: 50, pagoEm: "2026-11-01" },
+    // parcela de contrato ainda por fazer e cartão: fora
+    { id: "k1", contaId: "material", valor: 80, pago: false, vencimento: "2026-12-10", contratoId: "ct1" },
+    { id: "k2", contaId: "material", valor: 90, pago: false, vencimento: "2026-12-10", parcelaCartao: { grupo: "g" } }] };
+  const ls = M.aPagarDasObrasNaBase([obra], [cliente], { planoObra: PLANO_OBRA });
+  assert.deepStrictEqual(ls.map((l) => [l.competencia, l.valor, l.contaId, l._afetaSaldo, l.origem.tipo]),
+    [["2026-12", 553.58, "emp_construcao", false, "aPagarObra"], ["2027-01", 553.56, "emp_construcao", false, "aPagarObra"]]);
+  assert.ok(/a pagar em 02\/12\/2026/.test(ls[0].descricao), ls[0].descricao);
+  // como a parcela do cartão: data do lançamento = a compra; período = o mês do débito
+  assert.strictEqual(ls[0].lancadoEm, "2026-11-09");
+  assert.strictEqual(ls[0].criadoEm, undefined);
+  assert.ok(ls.every((l) => l.id.indexOf("apobra:") === 0));
+  // o cliente que paga direto ao fornecedor: nada passa pelo escritório
+  const direto = M.aPagarDasObrasNaBase([{ ...obra, clienteId: "c9", clientePagaDireto: true }], [{ id: "c9", nome: "Cliente" }], { planoObra: PLANO_OBRA });
+  assert.strictEqual(direto.length, 0);
 });
 
 teste("boleto da obra no banco: a linha é a parcela A PAGAR da obra (somadas as contas dela)", () => {
