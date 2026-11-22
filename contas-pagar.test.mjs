@@ -467,7 +467,7 @@ teste("o que foi pago vira realizado por conta e por prestador", () => {
     { contaId: "empreiteiro", prestadorId: "p1", valor: 2000, pago: true },
     { contaId: "empreiteiro", prestadorId: "p1", valor: 2000, pago: true, valorPago: 1800 },
     { contaId: "serralheiro", prestadorId: "p2", valor: 5000, pago: true },
-    { contaId: "serralheiro", prestadorId: "p2", valor: 5000, pago: false },
+    { contaId: "serralheiro", prestadorId: "p2", valor: 5000, pago: false, contratoId: "ct1" }, // parcela de contrato em aberto: fora
     { contaId: "material", valor: 300, pago: true },
   ];
   assert.deepStrictEqual(modulo.realizadoPorConta(contas), { empreiteiro: 3800, serralheiro: 5000, material: 300 });
@@ -478,13 +478,14 @@ teste("planejado: a compra no cartão conta inteira (parcelas pagas e a pagar); 
   const parc = (k, pago) => ({ id: k === 1 ? "lj" : "lj~p" + k, contaId: "material", valor: 1440, pago, ...(pago ? { valorPago: 1440, pagoEm: "2026-10-14" } : {}),
     vencimento: "2026-1" + (k - 1) + "-15", cartaoId: "cora", parcelaCartao: { grupo: "lj", k, de: 3, total: 4320, compraEm: "2026-09-21" } });
   const contas = [parc(1, true), parc(2, false), parc(3, false), { contaId: "material", valor: 100, pago: false }];
-  assert.deepStrictEqual(modulo.realizadoPorConta(contas), { material: 4320 });
+  // a conta lançada a pagar (fora do cartão) também é custo executado
+  assert.deepStrictEqual(modulo.realizadoPorConta(contas), { material: 4420 });
   const t = modulo.totaisContas(contas, "2026-10-20");
   assert.deepStrictEqual([t.pago, t.aberto], [1440, 2980]);
   // por etapa também: a compra inteira
   const comEtapa = contas.map((c) => ({ ...c, etapa: "laje_1" }));
   const pe = modulo.plPorEtapa([], comEtapa, {});
-  assert.strictEqual(pe.linhas.find((l) => l.etapaId === "laje_1").realizado, 4320);
+  assert.strictEqual(pe.linhas.find((l) => l.etapaId === "laje_1").realizado, 4420);
 });
 
 teste("conta avulsa nasce válida", () => {
@@ -1106,8 +1107,8 @@ teste("o P&L junta estimado e realizado na estrutura do plano", () => {
   const r = pl(plComCustos(), pagas);
   const linha = (id) => r.blocos.flatMap(b => b.linhas).find(l => l.conta.id === id);
   assert.strictEqual(linha("material").estimado, 400000);
-  assert.strictEqual(linha("material").realizado, 300000, "conta NÃO paga não entra no realizado");
-  assert.strictEqual(linha("material").saldo, 100000);
+  assert.strictEqual(linha("material").realizado, 350000, "conta lançada a pagar entra no realizado");
+  assert.strictEqual(linha("material").saldo, 50000);
   assert.strictEqual(linha("empreiteiro").realizado, 200000);
   assert.strictEqual(linha("impostos").realizado, 0, "estimado sem realizado aparece com zero");
   // os grupos vêm na ordem do plano
@@ -1125,7 +1126,7 @@ teste("conta sem nenhum dos dois lados não ocupa linha", () => {
 teste("o custo soma só os grupos de custo; excluídas fica de fora", () => {
   const r = pl(plComCustos(), pagas);
   assert.strictEqual(r.custo.estimado, 700000, "400 + 250 + 50, sem os 30 de reembolsos");
-  assert.strictEqual(r.custo.realizado, 500000);
+  assert.strictEqual(r.custo.realizado, 550000);
   const exc = r.blocos.find(b => b.grupo.id === "excluidas");
   assert.strictEqual(exc.estimado, 30000, "aparece no quadro");
 });
@@ -1136,7 +1137,7 @@ teste("entradas e resultado saem dos dois lados", () => {
   assert.strictEqual(r.entradas.estimado, 900000);
   assert.strictEqual(r.entradas.realizado, 0, "entrada não vem de conta a pagar");
   assert.strictEqual(r.resultado.estimado, 200000);
-  assert.strictEqual(r.resultado.realizado, -500000);
+  assert.strictEqual(r.resultado.realizado, -550000);
 });
 
 console.log("\n--- anel de progresso do custo ---");
@@ -1202,7 +1203,7 @@ teste("cada ofício traz o seu anel", () => {
   const pagas = [
     { id: "c1", obraId: "o1", contaId: "empreiteiro", valor: 87400, pago: true, valorPago: 87400, pagoEm: "2026-03-10" },
     { id: "c2", obraId: "o1", contaId: "gesseiro", valor: 100000, pago: true, valorPago: 100000, pagoEm: "2026-04-10" },
-    { id: "c3", obraId: "o1", contaId: "pintor", valor: 10000, pago: false, vencimento: "2026-05-10" },
+    { id: "c3", obraId: "o1", contaId: "pintor", valor: 10000, pago: false, vencimento: "2026-05-10", contratoId: "ctp" },
   ];
   const r = prest(estOficios(), pagas);
   const de = (id) => r.linhas.find(l => l.conta.id === id);
@@ -1211,7 +1212,7 @@ teste("cada ofício traz o seu anel", () => {
   assert.strictEqual(de("gesseiro").progresso.pct, 117, "gesseiro estourou");
   assert.strictEqual(de("gesseiro").progresso.acima, true);
   assert.strictEqual(de("gesseiro").progresso.arco, 100, "o anel não dá mais que a volta");
-  assert.strictEqual(de("pintor").progresso.pct, 0, "conta em aberto não é realizado");
+  assert.strictEqual(de("pintor").progresso.pct, 0, "parcela de contrato em aberto não é realizado");
   assert.strictEqual(de("serralheiro").realizado, 0);
   assert.strictEqual(r.total.realizado, 187400);
 });
@@ -1744,8 +1745,8 @@ teste("a conta abre em subcontas: grupo de material dos dois lados", () => {
     "do maior para o menor, e o que só tem gasto entra no fim");
   const concreto = linhas.find(l => l.chave === "Concreto");
   assert.strictEqual(concreto.estimado, 33125.20);
-  assert.strictEqual(concreto.realizado, 14546.48, "conta não paga não entra no realizado");
-  assert.strictEqual(concreto.saldo, 18578.72);
+  assert.strictEqual(concreto.realizado, 15545.48, "conta lançada a pagar entra no realizado");
+  assert.strictEqual(concreto.saldo, 17579.72);
   const cimento = linhas.find(l => l.chave === "Cimento");
   assert.strictEqual(cimento.estimado, 0, "gasto em grupo sem estimativa aparece mesmo assim");
   assert.strictEqual(cimento.saldo, -1963.41);
@@ -1781,8 +1782,8 @@ teste("o P&L girado por etapa fecha com o P&L por conta", () => {
     "ordem construtiva, com prestadores no fim");
   const fund = r.linhas.find(l => l.etapaId === "fundacao");
   assert.strictEqual(fund.estimado, 21878.85, "soma os grupos da mesma etapa");
-  assert.strictEqual(fund.realizado, 9219.60);
-  assert.strictEqual(fund.notas, 2, "conta não paga não entra");
+  assert.strictEqual(fund.realizado, 10218.60);
+  assert.strictEqual(fund.notas, 3, "conta lançada a pagar entra");
   assert.strictEqual(r.linhas.find(l => l.etapaId === "laje_1").estimado, 0, "etapa só com gasto aparece");
 
   // venda e terreno ficam fora: etapa é obra, não negócio
@@ -2811,13 +2812,30 @@ teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (t
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
 });
 
-teste("realizado: pago, cartão e compra a prazo (pedido) entram; parcela de contrato a pagar não", () => {
+teste("realizado: pago, cartão, compra a prazo e conta avulsa a pagar entram; parcela de contrato a pagar não", () => {
   assert.strictEqual(modulo.contaNoRealizado({ pago: true, valor: 10 }), true);
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10, parcelaCartao: { grupo: "g" } }), true);
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 155.72, pedidoId: "p1" }), true, "boleto da compra a vencer: o material já está na obra");
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10833.33, contratoId: "c1" }), false, "parcela de contrato: serviço ainda por fazer");
   assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 10, pedidoId: "p1", contratoId: "c1" }), false);
-  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500 }), false, "conta avulsa a pagar continua fora");
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500 }), true, "conta avulsa a pagar também é custo lançado");
+  assert.strictEqual(modulo.contaNoRealizado({ pago: false, valor: 500, vendaId: "v1" }), false);
+});
+
+teste("prestação por competência: o realizado é o mesmo do físico-financeiro (a pagar entra; contrato por fazer não)", () => {
+  const obra = { id: "o1", estimativaPL: [{ id: "e1", contaId: "material", valor: 1000 }, { id: "e2", contaId: "empreiteiro", valor: 1000 }],
+    contasPagar: [
+      { id: "a", contaId: "material", valor: 100, pago: true, valorPago: 100, pagoEm: "2026-09-10", vencimento: "2026-09-10" },
+      { id: "b", contaId: "material", valor: 200, pago: false, vencimento: "2026-12-02", pedidoId: "p1", compraEm: "2026-11-09" },
+      { id: "c", contaId: "empreiteiro", valor: 300, pago: false, vencimento: "2027-01-10", contratoId: "ct1" },
+    ] };
+  const comp = modulo.fisicoFinanceiroDaPrestacao(obra, { regime: "competencia", hoje: "2026-11-20" });
+  assert.strictEqual(comp.total.realizado, 300, "pago + compra a prazo");
+  assert.strictEqual(comp.total.aPagar, 300, "parcela de contrato ainda por fazer");
+  const caixa = modulo.fisicoFinanceiroDaPrestacao(obra, { regime: "caixa", hoje: "2026-11-20" });
+  assert.strictEqual(caixa.total.realizado, 100);
+  const cm = modulo.custosMensais(obra, { regime: "competencia", hoje: "2026-11-20" });
+  assert.strictEqual(cm.meses.reduce((t, m) => t + m.custo, 0), 300, "o gráfico de custo por competência bate com o realizado");
 });
 
 teste("linhas de chamada à mão: pôr, trocar, apagar; por chave (todos / obra); viram os marcos do gráfico", () => {
@@ -3545,13 +3563,14 @@ teste("orçado × realizado item a item: pavimento, conversão e mão de obra pe
   assert.strictEqual(tijT.qtdOrcada, 3000); assert.strictEqual(tijT.qtdRealizada, 3100); assert.strictEqual(tijT.saldo, -150);
   assert.ok(ter.itens.some((i) => /Frete \(sem item\)/.test(i.nome) && i.realizado === 350), "conta sem item aparece");
   const tijP = pav1.itens.find((i) => i.insumoCodigo === "TIJ-001");
-  assert.strictEqual(tijP.realizado, 0); assert.strictEqual(tijP.aPagar, 900);
+  // comprado e ainda a pagar: já no realizado, marcado como a vencer
+  assert.strictEqual(tijP.realizado, 900); assert.strictEqual(tijP.aPagar, 0); assert.strictEqual(tijP.aVencer, 900);
   const prest = r.macros.find((m) => m.macro === "Prestadores de serviços");
   const emp = prest.etapas.flatMap((e) => e.itens).find((i) => i.contaId === "empreiteiro");
   assert.strictEqual(emp.orcado, 105900, "as linhas de pedreiro e o empreiteiro somam na conta");
   assert.strictEqual(emp.realizado, 40000, "pago na etapa genérica casa assim mesmo");
   assert.strictEqual(emp.etapaId, "prest_empreiteiro");
-  assert.strictEqual(r.totais.realizado, 43050, "receita fora do custo");
+  assert.strictEqual(r.totais.realizado, 43950, "receita fora do custo");
   const junto = modulo.orcadoXRealizadoPorItem(obra, CAT_PAV, { porEtapa: false });
   const tij = junto.itens.find((i) => i.insumoCodigo === "TIJ-001");
   assert.strictEqual(tij.orcado, 4250);

@@ -37485,13 +37485,14 @@ function totaisContas(contas, hoje) {
 // No planejado, a compra no cartão do escritório conta inteira desde o dia
 // da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
 // contas a pagar e na base, cada parcela segue a fatura dela.
-// A compra a prazo (pedido ou nota de material, parcelas no boleto) vale o
-// mesmo: o material já está na obra, é custo executado, pago ou não. A
-// parcela de contrato a pagar não — o serviço dela ainda vai ser feito.
+// Toda conta lançada a pagar vale o mesmo — a compra a prazo (pedido, nota,
+// boleto a vencer) e a conta avulsa: é custo executado, pago ou não; é a
+// mesma régua da prestação por competência. A parcela de contrato a pagar
+// fica de fora: o serviço dela ainda vai ser feito.
 function contaNoRealizado(c) {
   if (!c) return false;
   if (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)) return true;
-  return !!(c.pedidoId && !c.contratoId && !c.vendaId && Number(c.valor) > 0);
+  return !!(!c.contratoId && !c.vendaId && Number(c.valor) !== 0);
 }
 // A venda de imóvel no Planejamento: o Planejamento acompanha a EXECUÇÃO
 // (gasto × planejado), não apura resultado. Do lado da venda, o realizado é
@@ -41258,8 +41259,10 @@ function fisicoFinanceiroDaPrestacao(obra, opcoes) {
   const itens = (ob.estimativaPL || []).filter((i) => i && !cpContaForaDoFF(i.contaId, plano));
   const contas = cpContasDoCusto(ob, plano);
   const est = estimativaPorConta(itens);
-  // caixa: realizado é o que saiu do banco; competência: tudo o que foi lançado
-  const realizou = (c) => regime === "competencia" || !!c.pago;
+  // caixa: realizado é o que saiu do banco; competência: o custo lançado —
+  // a mesma régua do físico-financeiro da obra (contaNoRealizado): pago,
+  // cartão e toda conta a pagar; a parcela de contrato ainda por fazer, não
+  const realizou = (c) => (regime === "competencia" ? contaNoRealizado(c) : !!c.pago);
   const real = {}, aPagar = {};
   for (const c of contas) {
     const k = c.contaId || "mo_diversos";
@@ -41328,7 +41331,9 @@ function custosMensais(obra, opcoes) {
     if (!k) continue;
     const m = por[k] || (por[k] = { pago: 0, vencido: 0, aberto: 0, custo: 0 });
     const v = cpValorLancado(c);
-    if (regime === "competencia") m.custo = red(m.custo + v);
+    // competência: o custo lançado (a mesma régua do realizado); a parcela de
+    // contrato ainda por fazer fica no que falta realizar
+    if (regime === "competencia") { if (contaNoRealizado(c)) m.custo = red(m.custo + v); }
     else if (c.pago) m.pago = red(m.pago + v);
     else if (String(c.vencimento || "").slice(0, 10) < hoje) m.vencido = red(m.vencido + v);
     else m.aberto = red(m.aberto + v);
