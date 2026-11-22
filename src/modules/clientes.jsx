@@ -3134,7 +3134,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const depoisPorId = new Map((contasDepois || []).filter(Boolean).map(c => [c.id, c]));
       for (const l of ligados) {
         const { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, competencia, numeroDoc, criadoEm } = l;
-        marcasDaEdicao[l.id] = { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, numeroDoc, criadoEm,
+        // a data do lançamento é o dia em que ele entrou: o refeito leva a do antigo
+        const entrou = typeof cpCarimboDeEntrada === "function" ? cpCarimboDeEntrada(l) : criadoEm;
+        marcasDaEdicao[l.id] = { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, numeroDoc, criadoEm: entrou,
           ...(datasMudaram ? {} : { competencia }) };
         const daNota = contasLigadasAoLancamento(obraDepois, l)
           .concat(contasLigadasAoLancamento(obraAntes, l).map(c => depoisPorId.get(c.id)).filter(Boolean));
@@ -3177,10 +3179,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const m2 = m && l.contaBanco === "nao" ? { ...m, extratoId: "", historicoBanco: "", contaBancariaId: "" } : m;
       return m2 ? { ...l, ...semVazios(m2) } : l;
     }) : ponte.lancamentos;
+    // o lançamento refeito com o mesmo id (a nota que perdeu um item e voltou
+    // pela ponte) também guarda o dia em que entrou
+    const carimboAntigo = new Map(lancsAgora.filter(Boolean).map(l => [l.id, typeof cpCarimboDeEntrada === "function" ? cpCarimboDeEntrada(l) : l.criadoEm]));
+    const daPonteComData = daPonte.map(l => (l && !marcasDaEdicao[l.id] && carimboAntigo.get(l.id) ? { ...l, criadoEm: carimboAntigo.get(l.id) } : l));
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
     if (daPonte.length || limpo.removidos || editouNoEscritorio) {
-      extras.lancamentos = outros.concat(limpo.lancamentos, daPonte);
+      extras.lancamentos = outros.concat(limpo.lancamentos, daPonteComData);
     }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);

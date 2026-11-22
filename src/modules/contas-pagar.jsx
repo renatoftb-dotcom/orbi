@@ -3702,6 +3702,19 @@ function cpDiaDoIdImportado(id) {
   if (!(ms > Date.UTC(2020, 0, 1) && ms < Date.UTC(2100, 0, 1))) return "";
   return cpDiaLocal(new Date(ms).toISOString());
 }
+// O carimbo de quando o lançamento entrou no VICKE, para o lançamento
+// refeito (a conta da obra editada, a nota reenviada pela ponte) levar
+// junto: editar não muda a data do lançamento. O importado não tem
+// carimbo gravado — ele está no id da importação.
+function cpCarimboDeEntrada(l) {
+  const x = l || {};
+  if (x.criadoEm) return String(x.criadoEm);
+  if (x.importadoEm) return String(x.importadoEm);
+  const m = /^imp_([0-9a-z]{7,9})_/.exec(String(x.id || ""));
+  if (!m) return "";
+  const ms = parseInt(m[1], 36);
+  return ms > Date.UTC(2020, 0, 1) && ms < Date.UTC(2100, 0, 1) ? new Date(ms).toISOString() : "";
+}
 // Quando o lançamento entrou no VICKE: carimbado ao gravar; importado, pelo
 // carimbo da importação. A data do movimento no banco NÃO é isso.
 function cpEntradaDoLancamento(l) {
