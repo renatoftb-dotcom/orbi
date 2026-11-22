@@ -4642,6 +4642,22 @@ function cpMarcosDoRecebimento(porModulo, somado) {
     return { chave, rotulo: "Liberação CEF" + (juntos ? " · Mód. " + juntos : "") };
   });
 }
+// As linhas de chamada do gráfico de recebimentos, postas à mão, mês a mês.
+// Ficam no cadastro como { chave: [{ mes: "2027-04", texto }] } — a chave é
+// "todos" (o empreendimento inteiro) ou o id da obra — e viram os marcos
+// { chave: mês, rotulo } que o gráfico e o PDF desenham.
+function cpMarcosManuais(guardados, chave) {
+  const lista = ((guardados || {})[chave]) || [];
+  return lista.filter((x) => x && /^\d{4}-\d{2}$/.test(String(x.mes || "")) && String(x.texto || "").trim())
+    .map((x) => ({ chave: x.mes, rotulo: String(x.texto).trim() }))
+    .sort((a, b) => a.chave.localeCompare(b.chave));
+}
+// Põe, troca ou (texto vazio) tira a chamada de um mês.
+function cpMudarMarco(lista, mes, texto) {
+  const sem = (lista || []).filter((x) => x && x.mes !== mes);
+  const t = String(texto || "").trim();
+  return (t ? sem.concat([{ mes, texto: t }]) : sem).sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+}
 // Onde vai o nome de cada marco e em que linha. O nome fica à direita da
 // linha de chamada; perto da borda direita, à esquerda dela. Um nome que
 // passa por cima da linha de chamada de outro marco fica numa linha acima
@@ -5542,7 +5558,7 @@ function IconePapel({ tamanho, estilo }) {
 // barra em coordenadas do gráfico; animar um <g> com `transform-box: fill-box`
 // não é respeitado por todos os navegadores e a barra ficava parada.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
-function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp, marcos }) {
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp, marcos, aoClicarMarco }) {
   // Revelação em cascata, como na calibragem: `reveladas` sobe de uma em uma
   // e cada barra só anima quando chega a sua vez. Recomeça quando a lista de
   // meses muda, para a animação rodar de novo depois de pagar ou filtrar.
@@ -5608,7 +5624,9 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
           const yTxt = 11 + posMarcos[q].linha * 15;
           const yBarra = BASE - altura(valorDoMes(m)) - 19;
           return (
-            <g key={"marco" + z.chave} data-vk-marco={z.chave}>
+            <g key={"marco" + z.chave} data-vk-marco={z.chave} onClick={aoClicarMarco ? (e) => { e.stopPropagation(); aoClicarMarco(z.chave); } : undefined}
+              style={{ cursor: aoClicarMarco ? "pointer" : "default" }}>
+              {aoClicarMarco && <title>Clique para mudar o texto ou apagar</title>}
               <line x1={cx} x2={cx} y1={yTxt + 4} y2={Math.max(yTxt + 5, yBarra)} stroke="#9ca3af" strokeWidth="1" />
               <circle cx={cx} cy={yTxt + 4} r="2" fill="#9ca3af" />
               <text x={posMarcos[q].inicio} y={yTxt + 3} fontSize="11" fontWeight="600" fill="#374151">{z.rotulo}</text>
@@ -5836,8 +5854,37 @@ function AnelRealizado({ pct, tam }) {
     </span>
   );
 }
-function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
+// A janela de uma linha de chamada: o texto do mês, Salvar, Apagar (se já
+// existe) e Cancelar. Não fecha clicando fora.
+function JanelaMarcoDoGrafico({ marco, aoSalvar, aoApagar, aoCancelar }) {
+  const [texto, setTexto] = useState((marco && marco.texto) || "");
+  const mes = marco && marco.mes ? cpRotuloBalde(marco.mes) : "";
+  const btn = { padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Linha de chamada" data-vk-janela-marco="1"
+      style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 420, boxSizing: "border-box", padding: 18, boxShadow: "0 18px 40px rgba(0,0,0,0.18)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Linha de chamada · {mes}</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4, marginBottom: 12 }}>O texto aparece em cima da barra do mês, no gráfico e no PDF.</div>
+        <input autoFocus value={texto} maxLength={60} data-vk-marco-texto="1" placeholder="Digite o texto da chamada"
+          onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && texto.trim()) aoSalvar(texto); if (e.key === "Escape") aoCancelar(); }}
+          style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)", fontSize: 14, fontFamily: "inherit" }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {marco && marco.existe && <button type="button" data-vk-marco-apagar="1" onClick={aoApagar}
+            style={{ ...btn, marginRight: "auto", background: "#fff", color: "#b91c1c", border: "1px solid #fca5a5" }}>Apagar</button>}
+          <button type="button" data-vk-marco-cancelar="1" onClick={aoCancelar} style={{ ...btn, background: "#fff", color: "#374151", border: "1px solid rgba(38,36,33,0.2)" }}>Cancelar</button>
+          <button type="button" data-vk-marco-salvar="1" disabled={!texto.trim()} onClick={() => aoSalvar(texto)}
+            style={{ ...btn, background: texto.trim() ? "#0474f4" : "#93c5fd", color: "#fff", border: "1px solid transparent" }}>Salvar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf, aoMudarMarco }) {
   const p = previa.param || {};
+  // a linha de chamada sendo posta ou editada: { mes, texto, existe }
+  const [marcoEmEdicao, setMarcoEmEdicao] = useState(null);
   const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods, ctPC: ct, prPC: pr } = previa.dados || {};
   const comp = ff && ff.regime === "competencia";
   const moeda = (v) => (v < -0.004 ? "-R$ " : "R$ ") + Math.abs(Number(v || 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5939,8 +5986,17 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {rm && rm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-receb="1">
             {titulo(++k, "Recebimentos mês a mês", "Contratos realizados e vendas estimadas, baseadas na procura e nos novos cadastros de clientes.")}
-            <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} marcos={rm.marcos || []} />
+            <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} marcos={rm.marcos || []}
+              onEscolherMes={aoMudarMarco ? (mes) => { if (mes === "pre") return; const z = (rm.marcos || []).find((x) => x.chave === mes);
+                setMarcoEmEdicao({ mes, texto: z ? z.rotulo : "", existe: !!z }); } : undefined}
+              aoClicarMarco={aoMudarMarco ? (mes) => { const z = (rm.marcos || []).find((x) => x.chave === mes);
+                setMarcoEmEdicao({ mes, texto: z ? z.rotulo : "", existe: !!z }); } : undefined} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
+            {aoMudarMarco && <div data-vk-marco-dica="1" style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
+              Clique num mês para pôr uma linha de chamada; clique numa chamada para mudar o texto ou apagar.</div>}
+            {marcoEmEdicao && <JanelaMarcoDoGrafico marco={marcoEmEdicao} aoCancelar={() => setMarcoEmEdicao(null)}
+              aoSalvar={(texto) => { aoMudarMarco(marcoEmEdicao.mes, texto); setMarcoEmEdicao(null); }}
+              aoApagar={() => { aoMudarMarco(marcoEmEdicao.mes, ""); setMarcoEmEdicao(null); }} />}
           </div>
         )}
         {fc && (
@@ -6135,7 +6191,7 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
       {rm.meses.length > 0 && (
         <div style={caixa}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Recebimento mês a mês</div>
-          <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={new Date().toISOString().slice(0, 10)} faixas={CP_FAIXAS_RECEB} marcos={cpMarcosDoRecebimento([{ nome: "", rm }], rm)} />
+          <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={new Date().toISOString().slice(0, 10)} faixas={CP_FAIXAS_RECEB} />
           {legenda(CP_FAIXAS_RECEB, rm.meses)}
         </div>
       )}
@@ -6204,7 +6260,11 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento, aoGuardarDatas, procura }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento, aoGuardarDatas, procura, marcosRecebimento, aoGuardarMarcos }) {
+  // as linhas de chamada do gráfico de recebimentos (postas à mão na prévia);
+  // a cópia local mostra a mudança na hora, o cadastro guarda
+  const [marcosLocal, setMarcosLocal] = useState(null);
+  const marcosAtuais = marcosLocal || marcosRecebimento || {};
   // no escritório a linha é a transação, com as colunas da planilha do escritório
   const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
   const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
@@ -6441,6 +6501,20 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     setPrevia({ param: exibir, dados: dadosDaPrestacao(exibir) });
   }
   const [previa, setPrevia] = useState(null);
+  // de quem são as linhas de chamada: do empreendimento inteiro ou da obra
+  function chaveDosMarcos(param) {
+    if (param && param.abrangencia === "todos" && temModulos) return "todos";
+    return (obraDaPrestacao && obraDaPrestacao.id) || "obra";
+  }
+  function mudarMarco(mes, texto) {
+    if (!previa) return;
+    const chave = chaveDosMarcos(previa.param);
+    const lista = cpMudarMarco(marcosAtuais[chave] || [], mes, texto);
+    const novo = { ...marcosAtuais, [chave]: lista };
+    setMarcosLocal(novo);
+    setPrevia((pv) => (pv && pv.dados && pv.dados.rmPC ? { ...pv, dados: { ...pv.dados, rmPC: { ...pv.dados.rmPC, marcos: cpMarcosManuais(novo, chave) } } } : pv));
+    if (aoGuardarMarcos) { try { aoGuardarMarcos(chave, lista); } catch (e) { /* a prévia segue mesmo sem gravar */ } }
+  }
   function dadosDaPrestacao(param) {
     // todo o empreendimento: as notas e os números de todos os módulos, no
     // mesmo período escolhido na base
@@ -6463,8 +6537,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       modulosPC: todos ? resumoPorModulo(listaModulos, { ...opPC, despesa: param.despesa, entrada: param.entrada, datas: datasPorId }) : null,
       nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
       cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
-      rmPC: mens ? mens.rm : obraDaPC ? (() => { const r = recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada });
-        return { ...r, marcos: cpMarcosDoRecebimento([{ nome: "", rm: r }], r) }; })() : null,
+      rmPC: mens ? { ...mens.rm, marcos: cpMarcosManuais(marcosAtuais, chaveDosMarcos(param)) }
+        : obraDaPC ? { ...recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }), marcos: cpMarcosManuais(marcosAtuais, chaveDosMarcos(param)) } : null,
       fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       ctPC: obraDaPC ? contratosFirmes(obraDaPC) : null,
       // a procura (cadastros do site) do empreendimento
@@ -6892,7 +6966,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           aoVoltar={() => { setParamPC({ ...previa.param, erro: "" }); setPrevia(null); }}
           aoCancelar={() => setPrevia(null)}
           aoGerar={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p); }}
-          aoGerarPdf={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p, { soPdf: true }); }} />}
+          aoGerarPdf={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p, { soPdf: true }); }}
+          aoMudarMarco={aoGuardarMarcos ? mudarMarco : null} />}
         {!doEscritorio && (
           <button type="button" data-vk-prestacao="1" onClick={abrirPrestacao} disabled={!filtradas.length || !!(prestando && prestando.fazendo)}
             title="Resumo por conta, lista das notas e os arquivos nota a nota, do que está filtrado (só o que foi pago)"

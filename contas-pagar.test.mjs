@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2809,6 +2809,20 @@ teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (t
   const L = modulo.linhasDaBase([{ id: "o1", nome: "Obra", contasPagar: r.contas }], {});
   const pc = modulo.prestacaoDeContas(L);
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
+});
+
+teste("linhas de chamada à mão: pôr, trocar, apagar; por chave (todos / obra); viram os marcos do gráfico", () => {
+  let l = modulo.cpMudarMarco([], "2027-09", "Liberação A");
+  l = modulo.cpMudarMarco(l, "2027-04", "Liberação B");
+  assert.deepStrictEqual(l.map((x) => x.mes), ["2027-04", "2027-09"], "em ordem de mês");
+  l = modulo.cpMudarMarco(l, "2027-04", "  Texto novo ");
+  assert.deepStrictEqual(l, [{ mes: "2027-04", texto: "Texto novo" }, { mes: "2027-09", texto: "Liberação A" }]);
+  l = modulo.cpMudarMarco(l, "2027-09", "");
+  assert.deepStrictEqual(l.map((x) => x.mes), ["2027-04"], "texto vazio apaga");
+  const g = { todos: l, o1: [{ mes: "2027-01", texto: "Só da obra" }, { mes: "x", texto: "inválido" }] };
+  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "todos"), [{ chave: "2027-04", rotulo: "Texto novo" }]);
+  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "o1"), [{ chave: "2027-01", rotulo: "Só da obra" }]);
+  assert.deepStrictEqual(modulo.cpMarcosManuais(null, "todos"), []);
 });
 
 teste("prestação: pagamento e estorno que se anulam não pedem arquivo; o que tem valor continua pedindo", () => {

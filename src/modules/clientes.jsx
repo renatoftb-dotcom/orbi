@@ -7061,6 +7061,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
           procura={ehEmpDoPainel && cliente ? cliente.procura || null : null}
+          marcosRecebimento={cliente ? cliente.marcosRecebimento || null : null}
+          aoGuardarMarcos={perm.podeGerenciarObra && cliente ? (chave, lista) => save((atual) => ({ ...atual, clientes: (atual.clientes || []).map((c) => (c && c.id === cliente.id
+            ? { ...c, marcosRecebimento: { ...(c.marcosRecebimento || {}), [chave]: lista } } : c)) })) : null}
           aoGuardarDatas={perm.podeGerenciarObra ? (porObra, inicioEmp) => gravarObrasFrescas((minhas) => {
             // só grava se alguma data mudou (início e término de cada obra; o
             // início do empreendimento fica em todos os módulos)
