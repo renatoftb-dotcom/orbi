@@ -2863,6 +2863,52 @@ function prestadorDoComprovante(prestadores, nome) {
   return colados.length === 1 ? colados[0] : null;
 }
 
+// Os nomes de quem emitiu o papel, na ordem em que vale procurar no
+// cadastro: a parte de fora/antes de "Loja X (Razão Ltda)" / "Loja X -
+// Cidade" sempre; a de dentro dos parênteses ou depois do traço só com duas
+// palavras ou mais — sozinha costuma ser a cidade ("NG Materiais -
+// Jacarezinho" casava com "Prefeitura Jacarezinho"). O nome inteiro por último.
+function cotNomesDoPapel(pa) {
+  const p = pa || {};
+  const out = [];
+  const por = (n) => { const t = String(n || "").replace(/\s+/g, " ").trim(); if (t.length >= 3 && out.indexOf(t) < 0) out.push(t); };
+  const duasPalavras = (t) => String(t || "").trim().split(/\s+/).length >= 2;
+  const brutos = [p.fantasia, p.lidoComo].filter(Boolean);
+  for (const n of brutos) {
+    const m = String(n).match(/^(.*?)\s*\((.*)\)\s*$/);
+    if (m) { por(m[1]); if (duasPalavras(m[2])) por(m[2]); }
+    const partes = String(n).split(/\s+[-–]\s+/);
+    if (partes.length > 1) partes.forEach((x, i) => { if (i === 0 || duasPalavras(x)) por(x); });
+  }
+  for (const n of brutos) por(n);
+  return out;
+}
+
+// O fornecedor do papel no cadastro — a MESMA regra na Entrada da obra, no
+// lançamento do fechamento e na proposta da cotação: primeiro o CNPJ; depois
+// o nome, por partes. Uma palavra só ("Jacarezinho") só vale se for o nome
+// inteiro do cadastro. Nomes do mesmo papel apontando para cadastros
+// diferentes: não adivinha (fica para a pessoa escolher). Sem achar, null —
+// o nome como veio no papel nunca vira fornecedor.
+function fornecedorDoPapel(prestadores, papel) {
+  const p = papel || {};
+  // fornecedor desativado não é sugerido
+  const lista = (prestadores || []).filter((f) => f && f.ativo !== false);
+  const dig = (t) => String(t == null ? "" : t).replace(/\D/g, "");
+  if (dig(p.cnpj).length >= 11) {
+    const porCnpj = lista.find((f) => dig(f.cnpjCpf) && dig(f.cnpjCpf) === dig(p.cnpj));
+    if (porCnpj) return porCnpj;
+  }
+  const achados = [];
+  for (const n of cotNomesDoPapel(p)) {
+    const x = prestadorDoComprovante(lista, n);
+    if (!x) continue;
+    if (n.trim().split(/\s+/).length < 2 && cotSemAcento(x.nome || "").trim() !== cotSemAcento(n).trim()) continue;
+    if (achados.indexOf(x) < 0) achados.push(x);
+  }
+  return achados.length === 1 ? achados[0] : null;
+}
+
 // ── Despesa paga: a saída que não tem itens ────────────────────
 // Pedido e cotação falam de material, com quantidade e unidade. O pagamento
 // do empreiteiro não tem nada disso: tem quem recebeu, quanto, quando e em
@@ -3932,19 +3978,8 @@ function escolhasDoCasamento(casamento, orcamento) {
 // leva o telefone, o CNPJ e o contrato depois. O CNPJ é a prova; o nome só
 // vale quando é o mesmo nome.
 function lojaCadastrada(prestadores, orcamento) {
-  const lista = (prestadores || []).filter((f) => f && f.ativo !== false);
   const o = orcamento || {};
-  const so = (t) => String(t == null ? "" : t).replace(/\D/g, "");
-  if (so(o.cnpj).length >= 11) {
-    const porCnpj = lista.find((f) => so(f.cnpjCpf) && so(f.cnpjCpf) === so(o.cnpj));
-    if (porCnpj) return porCnpj;
-  }
-  const alvo = cotSemAcento(o.fornecedor || "");
-  if (!alvo) return null;
-  return lista.find((f) => cotSemAcento(f.nome) === alvo)
-    || lista.find((f) => { const n = cotSemAcento(f.nome);
-        return n && (n.startsWith(alvo + " ") || alvo.startsWith(n + " ")); })
-    || null;
+  return fornecedorDoPapel(prestadores, { cnpj: o.cnpj, lidoComo: o.fornecedor });
 }
 
 // O pedido lido pela IA entra na MESMA lista de conferência do leitor por
@@ -10613,7 +10648,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // situação que o papel disse.
   function aplicarFichaDaIA(ficha, ctx) {
     const p = ficha.papel;
-    const achado = (ctx && ctx.loja) || prestadorDoComprovante(prestadores || [], p.lidoComo) || null;
+    const achado = (ctx && ctx.loja) || fornecedorDoPapel(prestadores || [], p) || null;
     const contaPadrao = (p.tipo === "nota" || p.tipo === "pedido" || p.tipo === "lista") ? "material" : "";
     const lidos = itensDaEntrada({ itens: ficha.itens }, "orcamento", insumos || []);
     setDespesa(null); setDestino("");
@@ -10628,7 +10663,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   }
 
   function abrirDespesaLida(comp, ctx) {
-    const achado = prestadorDoComprovante(prestadores || [], comp.favorecido)
+    const achado = fornecedorDoPapel(prestadores || [], { lidoComo: comp.favorecido, cnpj: comp.cnpj })
       || (ctx && ctx.loja) || null;
     const valor = comp.valor ? numeroDeCampo(comp.valor) : 0;
     // O comprovante e a nota de serviço também viram itens — um só, com o

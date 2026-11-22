@@ -89,7 +89,7 @@ const modulo = new Function(`
            pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial,
            ehDanfe, numeroDaNota, dataDaNota,
            ehComprovante, valorDoComprovante, dataDoComprovante, favorecidoDoComprovante,
-           documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante,
+           documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante, cotNomesDoPapel, fornecedorDoPapel,
            despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa,
            medicaoDaCotacao, totalDaMedicao, validarMedicao, completarItemDaConta,
            ehNotaDeServico, valorDaNotaDeServico, emissaoDaNotaDeServico,
@@ -1802,6 +1802,23 @@ teste("o CNPJ do orçamento acha a loja no cadastro", () => {
 teste("sem CNPJ, vale o nome — e acento não atrapalha", () => {
   assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "ourifer" }).id, "f1");
   assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "Casa do Construtor" }).id, "f2");
+});
+
+teste("fornecedor do papel: a mesma regra na Entrada, no fechamento e na cotação (CNPJ, nome por partes, cidade não casa)", () => {
+  assert.deepStrictEqual(M.cotNomesDoPapel({ lidoComo: "Loja Exemplo (Razão Exemplo Ltda)" }), ["Loja Exemplo", "Razão Exemplo Ltda", "Loja Exemplo (Razão Exemplo Ltda)"]);
+  assert.deepStrictEqual(M.cotNomesDoPapel({ lidoComo: "Loja Exemplo - Cidade" }), ["Loja Exemplo", "Loja Exemplo - Cidade"]);
+  assert.deepStrictEqual(M.cotNomesDoPapel({ lidoComo: "Loja Exemplo (Cidade)" }), ["Loja Exemplo", "Loja Exemplo (Cidade)"]);
+  assert.deepStrictEqual(M.cotNomesDoPapel({ fantasia: "Loja Exemplo", lidoComo: "Razão Exemplo Ltda" }), ["Loja Exemplo", "Razão Exemplo Ltda"]);
+  const cad = [{ id: "a", nome: "NG Materiais Construção" }, { id: "b", nome: "Prefeitura Jacarezinho" }, { id: "c", nome: "Loja Velha", ativo: false },
+    { id: "d", nome: "Depósito Exemplo", cnpjCpf: "11.222.333/0001-44" }];
+  const f = (pa) => (M.fornecedorDoPapel(cad, pa) || {}).id || null;
+  assert.strictEqual(f({ lidoComo: "NG Materiais - Jacarezinho" }), "a");
+  assert.strictEqual(f({ lidoComo: "Ng Materiais (Goris Materiais Para Construcao Ltda)" }), "a");
+  assert.strictEqual(f({ lidoComo: "Jacarezinho" }), null, "uma palavra só não casa dentro de outro nome");
+  assert.strictEqual(f({ lidoComo: "Goris Materiais Para - Jacarezinho" }), null);
+  assert.strictEqual(f({ lidoComo: "Nome Qualquer Ltda", cnpj: "11222333000144" }), "d", "o CNPJ vence o nome");
+  assert.strictEqual(f({ lidoComo: "Loja Velha" }), null, "desativado não é sugerido");
+  assert.strictEqual(f({ fantasia: "NG Materiais", lidoComo: "Prefeitura Jacarezinho Ltda" }), null, "dois cadastros diferentes: não adivinha");
 });
 
 teste("loja desativada não é sugerida, e nome que não bate não vira palpite", () => {
