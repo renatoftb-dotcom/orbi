@@ -41152,7 +41152,9 @@ function prestacaoDeContas(linhas) {
     const descricao = t.itens.length === 1 ? t.itens[0] : `${t.itens[0] || "Itens"} e mais ${t.itens.length - 1}`;
     return { numero: t.numero, ref: t.ref, data: t.data, fornecedor: t.fornecedor, descricao, itens: t.itens.length,
       conta: t.contas.join(" / "), nf: t.nf, valor: t.valor, arquivos: nomes, entrada: t.entrada,
-      semNumero: !t.numero, semArquivo: !nomes.length };
+      // Pagamento e estorno que se anulam (o Pix devolvido): nenhum dinheiro
+      // saiu, não há papel a cobrar.
+      semNumero: !t.numero, semArquivo: !nomes.length && Math.abs(t.valor) >= 0.01 };
   });
   const porConta = new Map();
   for (const l of pagas) {

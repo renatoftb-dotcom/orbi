@@ -2811,6 +2811,20 @@ teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (t
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
 });
 
+teste("prestação: pagamento e estorno que se anulam não pedem arquivo; o que tem valor continua pedindo", () => {
+  const L = modulo.linhasDaBase([{ id: "o1", nome: "Obra", contasPagar: [
+    { id: "i1", doc: "4042", numeroDoc: "0501", pago: true, pagoEm: "2026-03-06", valor: 298.1, contaId: "outras_taxas", descricao: "IPTU" },
+    { id: "i2", doc: "4042", numeroDoc: "0502", pago: true, pagoEm: "2026-03-10", valor: -298.1, contaId: "outras_taxas", descricao: "Estorno — IPTU" },
+    { id: "i3", doc: "4050", numeroDoc: "0503", pago: true, pagoEm: "2026-03-10", valor: 50, contaId: "outras_taxas", descricao: "Taxa" },
+  ] }], {});
+  const pc = modulo.prestacaoDeContas(L);
+  const n = (num) => pc.notas.find((x) => x.numero === num);
+  assert.strictEqual(n("4042").valor, 0);
+  assert.strictEqual(n("4042").semArquivo, false, "total zero: nada saiu, nada a comprovar");
+  assert.strictEqual(n("4050").semArquivo, true);
+  assert.strictEqual(pc.semArquivo, 1);
+});
+
 teste("número do papel: parcelas pagas em meses diferentes têm números diferentes; pedidos pagos juntos, um só", () => {
   const parc = (id, ped, pagoEm) => ({ id, numeroDoc: "0400", pedidoId: ped, pago: true, pagoEm, valor: 100 });
   const r = modulo.numerarPapeisDasPagas([parc("b1", "p1", "2026-09-10"), parc("b2", "p2", "2026-10-10")], 4215, () => true);
