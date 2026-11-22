@@ -3281,7 +3281,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const completa = typeof completarItemDaConta === "function"
       ? completarItemDaConta(conta, obraAtual, data.materiais || [], contasDaObra)
       : conta;
-    if (soCalcular) return completa;
+    // Conta antiga só com o nome do fornecedor (sem o cadastro ligado): o
+    // campo abria vazio, como se não houvesse fornecedor. Liga pelo nome igual.
+    let ligada = completa;
+    if (completa && !completa.prestadorId && String(completa.favorecido || "").trim()) {
+      const alvo = String(completa.favorecido).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const achado = prestadores.find((p) => p && String(p.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() === alvo);
+      if (achado) ligada = { ...completa, prestadorId: achado.id };
+    }
+    if (soCalcular) return ligada;
+    abrirFormDaConta(ligada);
+  };
+  const abrirFormDaConta = (completa) => {
+    const conta = completa;
     if (conta && conta.parcelaCartao && conta.parcelaCartao.grupo) {
       dialogo.alertar({ titulo: "Parcela do cartão", tipo: "aviso",
         mensagem: "Esta conta é uma parcela de compra no cartão do escritório. A compra (valor, data, parcelas) se corrige inteira em Escritório → Cartões." });
@@ -5273,10 +5285,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </Selecao>
               </div>
               <div>
-                <label style={C.label}>Favorecido</label>
+                <label style={C.label}>Fornecedor</label>
                 <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}
                   disabled={!!(prestRapido && prestRapido.destino === "conta")} criarRotulo="fornecedor" aoCriar={(termo) => abrirPrestRapido("conta", termo)}>
-                  <option value="">— sem prestador —</option>
+                  <option value="">{!formConta.prestadorId && String(formConta.favorecido || "").trim() ? `${formConta.favorecido} (fora do cadastro)` : "— sem fornecedor —"}</option>
                   {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </Selecao>
                 {blocoPrestRapido("conta")}
