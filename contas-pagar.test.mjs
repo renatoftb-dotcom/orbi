@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, cpPercentualRealizado, contratosFirmes, cpPeriodoDireto, cpMarcosDoRecebimento, cpLinhasDosMarcos, cpMarcosManuais, cpMudarMarco, cpMoverMarco, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2820,9 +2820,16 @@ teste("linhas de chamada à mão: pôr, trocar, apagar; por chave (todos / obra)
   l = modulo.cpMudarMarco(l, "2027-09", "");
   assert.deepStrictEqual(l.map((x) => x.mes), ["2027-04"], "texto vazio apaga");
   const g = { todos: l, o1: [{ mes: "2027-01", texto: "Só da obra" }, { mes: "x", texto: "inválido" }] };
-  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "todos"), [{ chave: "2027-04", rotulo: "Texto novo" }]);
-  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "o1"), [{ chave: "2027-01", rotulo: "Só da obra" }]);
+  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "todos"), [{ chave: "2027-04", rotulo: "Texto novo", dx: 0, dy: 0 }]);
+  assert.deepStrictEqual(modulo.cpMarcosManuais(g, "o1"), [{ chave: "2027-01", rotulo: "Só da obra", dx: 0, dy: 0 }]);
   assert.deepStrictEqual(modulo.cpMarcosManuais(null, "todos"), []);
+  // arrastar: guarda o lugar; trocar o texto não perde o lugar
+  let m = modulo.cpMoverMarco([{ mes: "2027-04", texto: "A" }], "2027-04", 1.234, -2.5);
+  assert.deepStrictEqual(m, [{ mes: "2027-04", texto: "A", dx: 1.23, dy: -2.5 }]);
+  m = modulo.cpMudarMarco(m, "2027-04", "B");
+  assert.deepStrictEqual(m, [{ mes: "2027-04", texto: "B", dx: 1.23, dy: -2.5 }]);
+  assert.strictEqual(modulo.cpMoverMarco(m, "2027-04", 0, -40)[0].dy, -6, "não sobe sem limite");
+  assert.deepStrictEqual(modulo.cpMarcosManuais({ t: m }, "t")[0], { chave: "2027-04", rotulo: "B", dx: 1.23, dy: -2.5 });
 });
 
 teste("prestação: pagamento e estorno que se anulam não pedem arquivo; o que tem valor continua pedindo", () => {

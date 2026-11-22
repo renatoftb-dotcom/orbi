@@ -4649,14 +4649,23 @@ function cpMarcosDoRecebimento(porModulo, somado) {
 function cpMarcosManuais(guardados, chave) {
   const lista = ((guardados || {})[chave]) || [];
   return lista.filter((x) => x && /^\d{4}-\d{2}$/.test(String(x.mes || "")) && String(x.texto || "").trim())
-    .map((x) => ({ chave: x.mes, rotulo: String(x.texto).trim() }))
+    .map((x) => ({ chave: x.mes, rotulo: String(x.texto).trim(), dx: Number(x.dx) || 0, dy: Number(x.dy) || 0 }))
     .sort((a, b) => a.chave.localeCompare(b.chave));
 }
 // Põe, troca ou (texto vazio) tira a chamada de um mês.
 function cpMudarMarco(lista, mes, texto) {
+  const antes = (lista || []).find((x) => x && x.mes === mes) || {};
   const sem = (lista || []).filter((x) => x && x.mes !== mes);
   const t = String(texto || "").trim();
-  return (t ? sem.concat([{ mes, texto: t }]) : sem).sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+  // trocar o texto não tira a chamada do lugar para onde foi arrastada
+  const lugar = (Number(antes.dx) || Number(antes.dy)) ? { dx: Number(antes.dx) || 0, dy: Number(antes.dy) || 0 } : {};
+  return (t ? sem.concat([{ mes, texto: t, ...lugar }]) : sem).sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+}
+// Arrastar a chamada: dx em larguras de mês, dy em linhas de texto (para cima
+// é negativo) — as mesmas unidades no gráfico da tela e no PDF.
+function cpMoverMarco(lista, mes, dx, dy) {
+  const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  return (lista || []).map((x) => (x && x.mes === mes ? { ...x, dx: r2(dx), dy: Math.max(-6, Math.min(12, r2(dy))) } : x));
 }
 // Onde vai o nome de cada marco e em que linha. O nome fica à direita da
 // linha de chamada; perto da borda direita, à esquerda dela. Um nome que
@@ -5002,7 +5011,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
         return { x: x0 + k * sl + sl / 2, largura: 0.6 + doc.getTextWidth(z.rotulo) }; }), x0 + larg, 0.8);
       doc.setFont("helvetica", "normal");
     }
-    const topoV = temMarcos ? 2 + (Math.max(0, ...posMarcosPdf.map((pm) => pm.linha)) + 1) * 3.6 : 0;
+    // chamada arrastada para cima ganha espaço no topo
+    const sobeV = temMarcos ? Math.max(0, ...o.marcos.map((z) => -(Number(z.dy) || 0))) * 3.6 : 0;
+    const topoV = temMarcos ? 2 + sobeV + (Math.max(0, ...posMarcosPdf.map((pm) => pm.linha)) + 1) * 3.6 : 0;
     const escP = maxPos > 0 ? Math.max(1, hPos - topoV) / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
     void total;
     doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(x0, base, x0 + Math.min(larg, slot * n + 2), base);
@@ -5043,10 +5054,18 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       const mc = temMarcos ? o.marcos.find((z) => z.chave === m.chave) : null;
       if (mc) {
         const ordem = o.marcos.indexOf(mc), linha = (posMarcosPdf[ordem] || {}).linha || 0;
-        const yTxt = y0 + 2.6 + linha * 3.6, yBarra = base - Math.max(0, v * escP) - (vertical ? 4.2 : 4.6);
-        doc.setDrawColor(156, 163, 175); doc.setLineWidth(0.15); doc.line(cx, yTxt + 0.9, cx, Math.max(yTxt + 1, yBarra));
-        const ini = posMarcosPdf[ordem] ? posMarcosPdf[ordem].inicio : cx + 0.8;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(6.2); cor(TINTA); doc.text(mc.rotulo, ini, yTxt); doc.setFont("helvetica", "normal");
+        // o lugar para onde a chamada foi arrastada na prévia (mesmas unidades)
+        const slM = Math.min(14, larg / Math.max(1, n));
+        const yTxt = Math.max(y0 + 1.5, y0 + 2.6 + sobeV + linha * 3.6 + (Number(mc.dy) || 0) * 3.6), yBarra = base - Math.max(0, v * escP) - (vertical ? 4.2 : 4.6);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.2);
+        const lgT = doc.getTextWidth(mc.rotulo);
+        const ini = Math.max(x0, Math.min(x0 + larg - lgT, (posMarcosPdf[ordem] ? posMarcosPdf[ordem].inicio : cx + 0.8) + (Number(mc.dx) || 0) * slM));
+        const deLado = cx < ini - 0.5 || cx > ini + lgT;
+        const xPonta = cx < ini ? ini - 0.6 : ini + lgT + 0.3;
+        const yL = deLado ? yTxt - 0.9 : yTxt + 0.9;
+        doc.setDrawColor(156, 163, 175); doc.setLineWidth(0.15); doc.line(cx, yL, cx, Math.max(yL + 0.1, yBarra));
+        if (deLado) doc.line(cx, yL, xPonta, yL);
+        cor(TINTA); doc.text(mc.rotulo, ini, yTxt); doc.setFont("helvetica", "normal");
       }
       const atual = m.chave === (o.mesHoje || "");
       if (mostra(k, m) && !(pulo > 1 && !atual && meses.some((z, j) => z.chave === (o.mesHoje || "") && j !== k && Math.abs(j - k) < pulo))) {
@@ -5558,7 +5577,9 @@ function IconePapel({ tamanho, estilo }) {
 // barra em coordenadas do gráfico; animar um <g> com `transform-box: fill-box`
 // não é respeitado por todos os navegadores e a barra ficava parada.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
-function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp, marcos, aoClicarMarco }) {
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series, faixas: faixasProp, marcos, aoClicarMarco, aoMoverMarco }) {
+  // a chamada sendo arrastada: { chave, ddx, ddy } (pixels desde o início)
+  const [arrasto, setArrasto] = useState(null);
   // Revelação em cascata, como na calibragem: `reveladas` sobe de uma em uma
   // e cada barra só anima quando chega a sua vez. Recomeça quando a lista de
   // meses muda, para a animação rodar de novo depois de pagar ou filtrar.
@@ -5593,7 +5614,9 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
   const xMarco = (z) => fluxo.meses.findIndex((m) => m.chave === z.chave) * (40 + 16) + 16 / 2 + 40 / 2;
   const larguraBarras = Math.max(fluxo.meses.length * (40 + 16), 220);
   const posMarcos = cpLinhasDosMarcos(listaMarcos.map((z) => ({ x: xMarco(z), largura: 4 + z.rotulo.length * 5.7 })), larguraBarras, 6);
-  const TOPO = listaMarcos.length ? 8 + (Math.max(0, ...posMarcos.map((pm) => pm.linha)) + 1) * 15 : 0;
+  // chamada arrastada para cima ganha espaço no topo
+  const SOBE = Math.max(0, ...listaMarcos.map((z) => -(Number(z.dy) || 0))) * 15;
+  const TOPO = listaMarcos.length ? 8 + SOBE + (Math.max(0, ...posMarcos.map((pm) => pm.linha)) + 1) * 15 : 0;
   const LARG = 40, ESPACO = 16, ALT = 130, BASE = TOPO + ALT + 16;
   const largura = Math.max(fluxo.meses.length * (LARG + ESPACO), 220);
   const altura = (v) => (maior > 0 && v > 0 ? Math.max(3, (v / maior) * ALT) : 0);
@@ -5621,15 +5644,43 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
           const i = fluxo.meses.findIndex((m) => m.chave === z.chave);
           const m = fluxo.meses[i];
           const cx = i * (LARG + ESPACO) + ESPACO / 2 + LARG / 2;
-          const yTxt = 11 + posMarcos[q].linha * 15;
+          const vivo = arrasto && arrasto.chave === z.chave ? arrasto : null;
+          const dxPx = (Number(z.dx) || 0) * (LARG + ESPACO) + (vivo ? vivo.ddx : 0);
+          const dyPx = (Number(z.dy) || 0) * 15 + (vivo ? vivo.ddy : 0);
+          const larg = 4 + z.rotulo.length * 5.7;
+          const ini = Math.max(0, Math.min(largura - larg, posMarcos[q].inicio + dxPx));
+          const yTxt = Math.max(2, 11 + SOBE + posMarcos[q].linha * 15 + dyPx);
           const yBarra = BASE - altura(valorDoMes(m)) - 19;
+          // a linha sai do topo da barra; se o nome foi para o lado, dobra
+          // e chega na ponta mais perto do nome
+          const deLado = cx < ini - 2 || cx > ini + larg;
+          const xPonta = cx < ini ? ini - 3 : ini + larg + 1;
+          const yLinha = deLado ? yTxt - 1 : yTxt + 4;
+          const pegar = aoMoverMarco ? (e) => {
+            e.preventDefault(); e.stopPropagation();
+            const x0 = e.clientX, y0 = e.clientY;
+            let ultimo = { ddx: 0, ddy: 0 };
+            const mover = (ev) => { ultimo = { ddx: ev.clientX - x0, ddy: ev.clientY - y0 }; setArrasto({ chave: z.chave, ...ultimo }); };
+            const soltar = () => {
+              window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar);
+              setArrasto(null);
+              if (Math.abs(ultimo.ddx) < 4 && Math.abs(ultimo.ddy) < 4) { if (aoClicarMarco) aoClicarMarco(z.chave); return; }
+              aoMoverMarco(z.chave, (Number(z.dx) || 0) + ultimo.ddx / (LARG + ESPACO), (Number(z.dy) || 0) + ultimo.ddy / 15);
+            };
+            window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar);
+          } : undefined;
           return (
-            <g key={"marco" + z.chave} data-vk-marco={z.chave} onClick={aoClicarMarco ? (e) => { e.stopPropagation(); aoClicarMarco(z.chave); } : undefined}
-              style={{ cursor: aoClicarMarco ? "pointer" : "default" }}>
-              {aoClicarMarco && <title>Clique para mudar o texto ou apagar</title>}
-              <line x1={cx} x2={cx} y1={yTxt + 4} y2={Math.max(yTxt + 5, yBarra)} stroke="#9ca3af" strokeWidth="1" />
-              <circle cx={cx} cy={yTxt + 4} r="2" fill="#9ca3af" />
-              <text x={posMarcos[q].inicio} y={yTxt + 3} fontSize="11" fontWeight="600" fill="#374151">{z.rotulo}</text>
+            <g key={"marco" + z.chave} data-vk-marco={z.chave}
+              onClick={aoClicarMarco && !aoMoverMarco ? (e) => { e.stopPropagation(); aoClicarMarco(z.chave); } : undefined}
+              style={{ cursor: aoMoverMarco ? (vivo ? "grabbing" : "grab") : aoClicarMarco ? "pointer" : "default" }}>
+              {(aoClicarMarco || aoMoverMarco) && <title>{aoMoverMarco ? "Arraste para mudar de lugar; clique para mudar o texto ou apagar" : "Clique para mudar o texto ou apagar"}</title>}
+              <polyline points={deLado ? `${cx},${Math.max(yLinha + 1, yBarra)} ${cx},${yLinha} ${xPonta},${yLinha}` : `${cx},${Math.max(yLinha + 1, yBarra)} ${cx},${yLinha}`}
+                fill="none" stroke="#9ca3af" strokeWidth="1" />
+              <circle cx={deLado ? xPonta : cx} cy={yLinha} r="2" fill="#9ca3af" />
+              {aoMoverMarco && <rect data-vk-marco-pegar="1" x={ini - 3} y={yTxt - 9} width={larg + 6} height={15} fill="transparent"
+                onPointerDown={pegar} style={{ touchAction: "none" }} />}
+              <text x={ini} y={yTxt + 3} fontSize="11" fontWeight="600" fill={vivo ? "#0474f4" : "#374151"} onPointerDown={pegar}
+                style={{ touchAction: aoMoverMarco ? "none" : undefined, userSelect: "none" }}>{z.rotulo}</text>
             </g>
           );
         })}
@@ -5881,7 +5932,7 @@ function JanelaMarcoDoGrafico({ marco, aoSalvar, aoApagar, aoCancelar }) {
   );
 }
 
-function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf, aoMudarMarco }) {
+function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf, aoMudarMarco, aoMoverMarco }) {
   const p = previa.param || {};
   // a linha de chamada sendo posta ou editada: { mes, texto, existe }
   const [marcoEmEdicao, setMarcoEmEdicao] = useState(null);
@@ -5990,10 +6041,11 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
               onEscolherMes={aoMudarMarco ? (mes) => { if (mes === "pre") return; const z = (rm.marcos || []).find((x) => x.chave === mes);
                 setMarcoEmEdicao({ mes, texto: z ? z.rotulo : "", existe: !!z }); } : undefined}
               aoClicarMarco={aoMudarMarco ? (mes) => { const z = (rm.marcos || []).find((x) => x.chave === mes);
-                setMarcoEmEdicao({ mes, texto: z ? z.rotulo : "", existe: !!z }); } : undefined} />
+                setMarcoEmEdicao({ mes, texto: z ? z.rotulo : "", existe: !!z }); } : undefined}
+              aoMoverMarco={aoMoverMarco || undefined} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
             {aoMudarMarco && <div data-vk-marco-dica="1" style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-              Clique num mês para pôr uma linha de chamada; clique numa chamada para mudar o texto ou apagar.</div>}
+              Clique num mês para pôr uma linha de chamada; arraste a chamada para mudar de lugar; clique nela para mudar o texto ou apagar.</div>}
             {marcoEmEdicao && <JanelaMarcoDoGrafico marco={marcoEmEdicao} aoCancelar={() => setMarcoEmEdicao(null)}
               aoSalvar={(texto) => { aoMudarMarco(marcoEmEdicao.mes, texto); setMarcoEmEdicao(null); }}
               aoApagar={() => { aoMudarMarco(marcoEmEdicao.mes, ""); setMarcoEmEdicao(null); }} />}
@@ -6515,6 +6567,15 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     setPrevia((pv) => (pv && pv.dados && pv.dados.rmPC ? { ...pv, dados: { ...pv.dados, rmPC: { ...pv.dados.rmPC, marcos: cpMarcosManuais(novo, chave) } } } : pv));
     if (aoGuardarMarcos) { try { aoGuardarMarcos(chave, lista); } catch (e) { /* a prévia segue mesmo sem gravar */ } }
   }
+  function moverMarco(mes, dx, dy) {
+    if (!previa) return;
+    const chave = chaveDosMarcos(previa.param);
+    const lista = cpMoverMarco(marcosAtuais[chave] || [], mes, dx, dy);
+    const novo = { ...marcosAtuais, [chave]: lista };
+    setMarcosLocal(novo);
+    setPrevia((pv) => (pv && pv.dados && pv.dados.rmPC ? { ...pv, dados: { ...pv.dados, rmPC: { ...pv.dados.rmPC, marcos: cpMarcosManuais(novo, chave) } } } : pv));
+    if (aoGuardarMarcos) { try { aoGuardarMarcos(chave, lista); } catch (e) { /* a prévia segue mesmo sem gravar */ } }
+  }
   function dadosDaPrestacao(param) {
     // todo o empreendimento: as notas e os números de todos os módulos, no
     // mesmo período escolhido na base
@@ -6967,7 +7028,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           aoCancelar={() => setPrevia(null)}
           aoGerar={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p); }}
           aoGerarPdf={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p, { soPdf: true }); }}
-          aoMudarMarco={aoGuardarMarcos ? mudarMarco : null} />}
+          aoMudarMarco={aoGuardarMarcos ? mudarMarco : null} aoMoverMarco={aoGuardarMarcos ? moverMarco : null} />}
         {!doEscritorio && (
           <button type="button" data-vk-prestacao="1" onClick={abrirPrestacao} disabled={!filtradas.length || !!(prestando && prestando.fazendo)}
             title="Resumo por conta, lista das notas e os arquivos nota a nota, do que está filtrado (só o que foi pago)"
