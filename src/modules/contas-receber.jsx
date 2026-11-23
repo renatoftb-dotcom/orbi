@@ -518,6 +518,23 @@ function obraComNotaDaVenda(obra, vendaId, nota) {
     return { ...sem, ...(obs ? { observacao: obs } : {}), ...(n.contratoPendente ? { contratoPendente: true } : {}) };
   });
 }
+// Mudar a data de um recebimento da venda ainda não recebido (o sinal, uma
+// parcela, a liberação do financiamento): só o vencimento muda, com o
+// registro do que era. O recebido não se mexe por aqui — desfaz e recebe de novo.
+function obraComNovoVencimentoDaVenda(obra, contaId, novaData, quem, agoraIso) {
+  const o = obra || {};
+  const d = String(novaData || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return { erro: "Informe a nova data." };
+  const c = (o.contasPagar || []).find((x) => x && x.id === contaId);
+  if (!c || !c.vendaId) return { erro: "Recebimento não encontrado." };
+  if (c.pago) return { erro: "Já recebido: desfaça o recebimento antes de mudar a data." };
+  const antes = String(c.vencimento || "").slice(0, 10);
+  if (antes === d) return { obra: o, mudou: false };
+  const br = (x) => (x ? x.split("-").reverse().join("/") : "sem data");
+  const linha = { em: agoraIso || new Date().toISOString(), ato: "editada", por: String(quem || "").trim(), detalhe: `vencimento ${br(antes)} → ${br(d)}` };
+  const nova = { ...c, vencimento: d, registros: [...(c.registros || []), linha] };
+  return { obra: { ...o, contasPagar: (o.contasPagar || []).map((x) => (x && x.id === contaId ? nova : x)) }, mudou: true };
+}
 function obraComVendaAlterada(obra, vendaId, fn) {
   const o = obra || {};
   return { ...o, vendas: vendasDaObra(o).map((v) => (v.id === vendaId ? fn(v) : v)) };
@@ -1198,6 +1215,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const [formVenda, setFormVenda] = useState(null); // ver planoDaVenda
   const [erroVenda, setErroVenda] = useState("");
   const [recebendo, setRecebendo] = useState(null); // { conta, dia, valor, contaBancaria, erro }
+  const [mudandoData, setMudandoData] = useState(null); // { conta, data, erro } — nova data de um recebimento
   // Com mais de uma conta no banco, o recebimento diz em qual entrou: é ela
   // que o lançamento leva, para casar com a linha certa no fechamento.
   const contasDoBanco = (contasBancarias || []).filter(Boolean);
@@ -1307,6 +1325,13 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     const lista = contas.flatMap((x) => (x && x.id === c.id ? [{ ...paga, valor: falta > 0.005 ? valor : paga.valor }].concat(resto) : [x]));
     aoGravarObra({ ...obra, contasPagar: lista });
     setRecebendo(null);
+  }
+  function salvarNovaData() {
+    const f = mudandoData;
+    const r = obraComNovoVencimentoDaVenda(obra, f.conta.id, f.data, quem || "");
+    if (r.erro) { setMudandoData({ ...f, erro: r.erro }); return; }
+    if (r.mudou) aoGravarObra(r.obra);
+    setMudandoData(null);
   }
   async function desfazerRecebimentoDaVenda(c) {
     // o lançamento que foi para o escritório está no mês do recebimento:
@@ -1458,7 +1483,11 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                   {!v && u.projecao && <button style={{ ...btn, color: "#b91c1c" }} onClick={() => tirarProjecao(u)}>Tirar projeção</button>}
                   {v && <button data-vk-comentar-venda="1" style={btn} onClick={() => setNota({ vendaId: v.id, observacao: v.observacao || "", contratoPendente: !!v.contratoPendente })}>Comentário</button>}
                   {v && <button style={btn} onClick={() => setAberta({ ...aberta, [u.id]: !ab })}>{ab ? "Esconder" : "Ver recebimentos"}</button>}
-                  <button style={btn} onClick={() => setFormUn({ id: u.id, nome: u.nome, area: u.area || "", precoEstimado: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "" })}>Editar</button>
+                  <button data-vk-editar-unidade="1" style={btn} onClick={() => {
+                    setFormUn({ id: u.id, nome: u.nome, area: u.area || "", precoEstimado: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "" });
+                    // o formulário abre no alto da lista: leva a tela até ele
+                    setTimeout(() => { const el = typeof document !== "undefined" && document.querySelector("[data-vk-form-unidade]"); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 50);
+                  }}>{v ? "Editar unidade" : "Editar"}</button>
                   {v ? <button style={{ ...btn, color: "#b91c1c" }} onClick={() => desfazerVenda(l)}>Desfazer venda</button>
                     : <button style={{ ...btn, color: "#b91c1c" }} onClick={() => excluirUnidade(u)}>Excluir</button>}
                 </div>
@@ -1484,6 +1513,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 {l.contas.map((c, i) => {
                   const vencida = !c.pago && c.vencimento && c.vencimento < hoje;
                   const aqui = recebendo && recebendo.conta.id === c.id;
+                  const mudando = mudandoData && mudandoData.conta.id === c.id;
                   return (
                     <div key={c.id} data-vk-receber-venda={c.id} style={{ padding: "9px 14px", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none", display: "grid", gap: 6 }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
@@ -1494,12 +1524,24 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                         </span>
                         <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: c.pago ? "#047857" : vencida ? "#b91c1c" : "#111827" }}>
                           {dinheiro(c.pago ? (c.valorPago || c.valor) : c.valor)}</span>
-                        {podeEditar && !c.pago && !aqui && (
-                          <button data-vk-receber-parte="1" style={btn} onClick={() => setRecebendo({ conta: c, dia: c.vencimento && c.vencimento <= hoje ? c.vencimento : hoje,
-                            valor: Number(c.valor).toFixed(2).replace(".", ","), contaBancaria: "", erro: "" })}>Receber</button>
+                        {podeEditar && !c.pago && !aqui && !mudando && (
+                          <button data-vk-mudar-data="1" style={btn} onClick={() => { setRecebendo(null); setMudandoData({ conta: c, data: String(c.vencimento || "").slice(0, 10), erro: "" }); }}>Alterar data</button>
+                        )}
+                        {podeEditar && !c.pago && !aqui && !mudando && (
+                          <button data-vk-receber-parte="1" style={btn} onClick={() => { setMudandoData(null); setRecebendo({ conta: c, dia: c.vencimento && c.vencimento <= hoje ? c.vencimento : hoje,
+                            valor: Number(c.valor).toFixed(2).replace(".", ","), contaBancaria: "", erro: "" }); }}>Receber</button>
                         )}
                         {podeEditar && c.pago && <button style={btn} onClick={() => desfazerRecebimentoDaVenda(c)}>Desfazer</button>}
                       </div>
+                      {mudando && (
+                        <div data-vk-janela-data="1" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", background: "#f8fafc", borderRadius: 10, padding: 10 }}>
+                          <label style={{ display: "grid", gap: 3 }}><span style={rot}>Nova data</span>
+                            <input type="date" data-vk-nova-data="1" style={{ ...inp, width: 160 }} value={mudandoData.data} onChange={(e) => setMudandoData({ ...mudandoData, data: e.target.value, erro: "" })} /></label>
+                          <button data-vk-salvar-data="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={salvarNovaData}>Salvar</button>
+                          <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setMudandoData(null)}>Cancelar</button>
+                          {mudandoData.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{mudandoData.erro}</div>}
+                        </div>
+                      )}
                       {aqui && (
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", background: "#f8fafc", borderRadius: 10, padding: 10 }}>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Dia em que entrou</span>

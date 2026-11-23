@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, planoDaProjecao, obraComProjecao, obraComNotaDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao, procuraDoCsv, procuraResumo };`)();
+    planoDaVenda, planoDaProjecao, obraComProjecao, obraComNotaDaVenda, obraComNovoVencimentoDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao, procuraDoCsv, procuraResumo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -307,6 +307,21 @@ teste("projeção de venda e comentário/contrato pendente", () => {
   assert.strictEqual(obra.vendas[0].observacao, "Contrato assinado"); assert.ok(!obra.vendas[0].contratoPendente);
   // tirar a projeção
   assert.ok(!M.obraComProjecao({ unidadesVenda: [{ id: "u9", projecao: r.projecao }] }, "u9", null).unidadesVenda[0].projecao);
+});
+
+teste("venda: muda a data do sinal ainda não recebido, com registro; recebido não muda", () => {
+  const obra = { id: "o1", contasPagar: [
+    { id: "s1", vendaId: "v1", parteVenda: "sinal", valor: 40300, pago: false, vencimento: "2026-11-23", registros: [] },
+    { id: "s2", vendaId: "v1", parteVenda: "sinal", valor: 100, pago: true, pagoEm: "2026-11-10", vencimento: "2026-11-10" },
+    { id: "m1", contaId: "material", valor: 50, pago: false, vencimento: "2026-11-23" }] };
+  const r = M.obraComNovoVencimentoDaVenda(obra, "s1", "2026-12-15", "Fulano", "2026-11-23T12:00:00.000Z");
+  const c = r.obra.contasPagar.find((x) => x.id === "s1");
+  assert.deepStrictEqual([r.mudou, c.vencimento, c.registros[0].detalhe, c.registros[0].por], [true, "2026-12-15", "vencimento 23/11/2026 → 15/12/2026", "Fulano"]);
+  assert.strictEqual(r.obra.contasPagar.find((x) => x.id === "m1"), obra.contasPagar[2]);
+  assert.ok(M.obraComNovoVencimentoDaVenda(obra, "s2", "2026-12-15").erro);
+  assert.ok(M.obraComNovoVencimentoDaVenda(obra, "m1", "2026-12-15").erro, "só recebimento de venda");
+  assert.ok(M.obraComNovoVencimentoDaVenda(obra, "s1", "").erro);
+  assert.strictEqual(M.obraComNovoVencimentoDaVenda(obra, "s1", "2026-11-23").mudou, false);
 });
 
 for (const [nome, fn] of testes) {
